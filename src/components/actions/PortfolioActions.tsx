@@ -3,7 +3,7 @@
  *
  * Top-level action panel displayed when the user is in the portfolio overview.
  * Provides actions that apply to the portfolio as a whole, such as adding
- * a new account or refreshing all prices.
+ * a new account, refreshing all prices, or toggling the detail panel.
  *
  * These actions are rendered at the top of the ActionPanel in the portfolio
  * list view, above any account-specific or position-specific actions.
@@ -14,6 +14,7 @@
  *   <PortfolioActions
  *     onAddAccount={() => push(<AccountForm onSubmit={...} />)}
  *     onRefresh={() => refresh()}
+ *     toggleDetailAction={<Action ... />}
  *   />
  * </ActionPanel>
  * ```
@@ -38,6 +39,13 @@ interface PortfolioActionsProps {
    * Only shown when there is at least one account to add positions to.
    */
   onSearchInvestments?: () => void;
+
+  /**
+   * Pre-built Action element that toggles the detail panel on/off.
+   * Passed from the parent so the toggle state is managed in one place.
+   * Rendered inside the "View" section.
+   */
+  toggleDetailAction?: React.JSX.Element;
 }
 
 // ──────────────────────────────────────────
@@ -51,16 +59,19 @@ interface PortfolioActionsProps {
  * 1. Add Account — navigates to the AccountForm in create mode
  * 2. Search Investments — navigates to the search view (if accounts exist)
  * 3. Refresh Prices — re-fetches all prices and FX rates, clearing daily cache
+ * 4. Toggle Detail Panel — shows/hides the split-pane detail view (⌘D)
  *
  * Keyboard shortcuts:
  * - ⌘N → Add Account
  * - ⌘F → Search Investments
  * - ⌘R → Refresh Prices
+ * - ⌘D → Toggle Detail Panel (handled by the passed-in action element)
  */
 export function PortfolioActions({
   onAddAccount,
   onRefresh,
   onSearchInvestments,
+  toggleDetailAction,
 }: PortfolioActionsProps): React.JSX.Element {
   return (
     <>
@@ -88,6 +99,8 @@ export function PortfolioActions({
           onAction={onRefresh}
         />
       </ActionPanel.Section>
+
+      {toggleDetailAction && <ActionPanel.Section title="View">{toggleDetailAction}</ActionPanel.Section>}
     </>
   );
 }

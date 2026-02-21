@@ -6,6 +6,32 @@
  */
 
 // ──────────────────────────────────────────
+// Sorting
+// ──────────────────────────────────────────
+
+/** Fields that positions can be sorted by */
+export enum SortField {
+  VALUE = "VALUE",
+  CHANGE = "CHANGE",
+}
+
+/** Sort direction */
+export enum SortDirection {
+  DESC = "DESC",
+  ASC = "ASC",
+}
+
+/** Combined sort option used by the UI dropdown */
+export interface SortOption {
+  field: SortField;
+  direction: SortDirection;
+  /** Display label for the dropdown, e.g. "Value ↓" */
+  label: string;
+  /** Unique string key for the dropdown value */
+  key: string;
+}
+
+// ──────────────────────────────────────────
 // Enums
 // ──────────────────────────────────────────
 

@@ -72,6 +72,9 @@ export interface UsePortfolioReturn {
 
   // ── Bulk Operations ──
 
+  /** Merges pre-built accounts (with their own IDs) into the portfolio */
+  mergeAccounts: (accounts: Account[]) => Promise<void>;
+
   /** Returns a flat array of all positions across all accounts */
   getAllPositions: () => Position[];
 
@@ -393,6 +396,36 @@ export function usePortfolio(): UsePortfolioReturn {
     [portfolio, mutate],
   );
 
+  // ── Bulk Operations ─────────────────────
+
+  const mergeAccounts = useCallback(
+    async (accounts: Account[]): Promise<void> => {
+      await mutate(
+        (async () => {
+          const current = portfolio ?? (await loadPortfolio());
+          const updated: Portfolio = {
+            ...current,
+            accounts: [...current.accounts, ...accounts],
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: [...currentData.accounts, ...accounts],
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+    },
+    [portfolio, mutate],
+  );
+
   // ── Query Helpers ──────────────────────
 
   const getAllPositions = useCallback((): Position[] => {
@@ -443,6 +476,8 @@ export function usePortfolio(): UsePortfolioReturn {
     addPosition,
     updatePosition,
     removePosition,
+
+    mergeAccounts,
 
     getAllPositions,
     getAllSymbols,

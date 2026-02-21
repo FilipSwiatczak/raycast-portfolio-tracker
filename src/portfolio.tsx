@@ -5,7 +5,7 @@
  * - `usePortfolio` hook (CRUD operations on accounts/positions via LocalStorage)
  * - `usePortfolioValue` hook (live price fetching, FX conversion, valuation)
  * - `PortfolioList` component (the main UI)
- * - Navigation targets (AccountForm, EditPositionForm, search flow)
+ * - Navigation targets (AccountForm, EditPositionForm, AddUnitsForm, search flow)
  *
  * It also updates the Raycast command metadata subtitle with the total portfolio
  * value so it's visible in the Raycast search bar at all times.
@@ -16,16 +16,18 @@
 
 import React from "react";
 import { useEffect } from "react";
-import { useNavigation, updateCommandMetadata } from "@raycast/api";
+import { useNavigation, updateCommandMetadata, showToast, Toast } from "@raycast/api";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { usePortfolioValue } from "./hooks/usePortfolioValue";
 import { PortfolioList } from "./components/PortfolioList";
 import { AccountForm } from "./components/AccountForm";
 import { EditPositionForm } from "./components/EditPositionForm";
+import { AddUnitsForm } from "./components/AddUnitsForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
 import { Account, Position, AccountType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
 import { clearPriceCache } from "./services/price-cache";
+import { SAMPLE_ACCOUNTS, isSampleAccount } from "./utils/sample-portfolio";
 
 // ──────────────────────────────────────────
 // Command Component
@@ -45,6 +47,7 @@ export default function PortfolioCommand(): React.JSX.Element {
     addPosition,
     updatePosition,
     removePosition,
+    mergeAccounts,
   } = usePortfolio();
 
   const {
@@ -125,6 +128,19 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  function handleAddUnits(account: Account, position: Position): void {
+    push(
+      <AddUnitsForm
+        position={position}
+        accountId={account.id}
+        accountName={account.name}
+        onSubmit={async (newTotalUnits: number) => {
+          await updatePosition(account.id, position.id, newTotalUnits);
+        }}
+      />,
+    );
+  }
+
   async function handleDeletePosition(accountId: string, positionId: string): Promise<void> {
     await removePosition(accountId, positionId);
   }
@@ -157,6 +173,47 @@ export default function PortfolioCommand(): React.JSX.Element {
     }
   }
 
+  // ── Sample Portfolio Handlers ──
+
+  async function handleLoadSample(): Promise<void> {
+    try {
+      // Merge the pre-built sample accounts (with their sample- prefixed IDs)
+      // directly into the portfolio so isSampleAccount() detection works.
+      await mergeAccounts(SAMPLE_ACCOUNTS);
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Sample Portfolio Loaded",
+        message: "Explore the demo data, then hide it when you're ready.",
+      });
+    } catch (error) {
+      console.error("Failed to load sample portfolio:", error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to Load Sample",
+        message: String(error),
+      });
+    }
+  }
+
+  async function handleRemoveSample(): Promise<void> {
+    try {
+      const accounts = portfolio?.accounts ?? [];
+      const sampleAccountIds = accounts.filter((a) => isSampleAccount(a.id)).map((a) => a.id);
+
+      for (const accountId of sampleAccountIds) {
+        await removeAccount(accountId);
+      }
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Sample Portfolio Removed",
+      });
+    } catch (error) {
+      console.error("Failed to remove sample portfolio:", error);
+    }
+  }
+
   // ── Render ──
 
   return (
@@ -170,9 +227,12 @@ export default function PortfolioCommand(): React.JSX.Element {
       onDeleteAccount={handleDeleteAccount}
       onAddPosition={handleAddPosition}
       onEditPosition={handleEditPosition}
+      onAddUnits={handleAddUnits}
       onDeletePosition={handleDeletePosition}
       onRefresh={handleRefresh}
       onSearchInvestments={(portfolio?.accounts.length ?? 0) > 0 ? handleSearchInvestments : undefined}
+      onLoadSample={handleLoadSample}
+      onRemoveSample={handleRemoveSample}
     />
   );
 }

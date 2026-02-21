@@ -6,7 +6,7 @@
  */
 
 import { Color } from "@raycast/api";
-import { AccountType, AssetType } from "./types";
+import { AccountType, AssetType, SortField, SortDirection, SortOption } from "./types";
 
 // ──────────────────────────────────────────
 // Account Type Display Labels
@@ -26,6 +26,18 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 /** Ordered list of account types for form dropdowns */
 export const ACCOUNT_TYPE_OPTIONS = Object.entries(ACCOUNT_TYPE_LABELS).map(([value, title]) => ({ value, title }));
+
+/** Colour-coded tags for each account type (used in section subtitles) */
+export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
+  [AccountType.ISA]: Color.Blue,
+  [AccountType.LISA]: Color.Purple,
+  [AccountType.SIPP]: Color.Orange,
+  [AccountType.GIA]: Color.Green,
+  [AccountType.BROKERAGE]: Color.Magenta,
+  [AccountType._401K]: Color.Yellow,
+  [AccountType.CRYPTO]: Color.Red,
+  [AccountType.OTHER]: Color.SecondaryText,
+};
 
 // ──────────────────────────────────────────
 // Asset Type Display Labels & Icons
@@ -140,6 +152,28 @@ export const COLOR_NEGATIVE: Color = Color.Red;
 
 /** Colour used for neutral / zero changes */
 export const COLOR_NEUTRAL: Color = Color.SecondaryText;
+
+// ──────────────────────────────────────────
+// Sorting Configuration
+// ──────────────────────────────────────────
+
+/** Available sort options for the portfolio list dropdown */
+export const SORT_OPTIONS: SortOption[] = [
+  { field: SortField.VALUE, direction: SortDirection.DESC, label: "Value ↓", key: "value-desc" },
+  { field: SortField.VALUE, direction: SortDirection.ASC, label: "Value ↑", key: "value-asc" },
+  { field: SortField.CHANGE, direction: SortDirection.DESC, label: "Change ↓", key: "change-desc" },
+  { field: SortField.CHANGE, direction: SortDirection.ASC, label: "Change ↑", key: "change-asc" },
+];
+
+/** Default sort key (value descending) */
+export const DEFAULT_SORT_KEY = "value-desc";
+
+// ──────────────────────────────────────────
+// Sample Portfolio
+// ──────────────────────────────────────────
+
+/** ID prefix used to identify sample/demo accounts and positions */
+export const SAMPLE_ID_PREFIX = "sample-";
 
 // ──────────────────────────────────────────
 // Network / Retry Configuration

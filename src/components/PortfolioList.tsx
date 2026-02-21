@@ -6,11 +6,13 @@
  * the "Portfolio Tracker" command.
  *
  * Structure:
- * - A `List` with `isShowingDetail={true}` for a split-pane layout
- * - Account totals displayed in the navigation title / search bar area
- * - One `List.Section` per account, with the account name and total as title/subtitle
+ * - A `List` with configurable `isShowingDetail` (toggled via ⌘D)
+ * - Sort dropdown in the search bar accessory (Value ↓/↑, Change ↓/↑)
+ * - One `List.Section` per account with coloured type tag and total in subtitle
  * - Each position rendered as a `PositionListItem` within its account section
- * - Empty state handled by `EmptyPortfolio` component
+ * - Account summary row pinned to the bottom of each section
+ * - Empty state handled by `EmptyPortfolio` component (with sample portfolio)
+ * - Sample portfolio banner with "Hide Sample" action (no confirmation)
  * - All actions composed in a layered ActionPanel:
  *     1. PositionActions (when a position is selected)
  *     2. AccountActions (for the parent account of the selected position)
@@ -21,42 +23,25 @@
  * - Receives valuation data from `usePortfolioValue` hook (passed as props)
  * - Delegates all mutations back to the parent via callbacks
  * - Does NOT call hooks directly — purely a rendering component
- *
- * This separation means the component can be iterated on visually without
- * touching any data-fetching or mutation logic.
- *
- * Usage:
- * ```tsx
- * // In portfolio.tsx (the command entry point):
- * <PortfolioList
- *   portfolio={portfolio}
- *   valuation={valuation}
- *   isLoading={isLoading}
- *   errors={errors}
- *   onAddAccount={handleAddAccount}
- *   onEditAccount={handleEditAccount}
- *   onDeleteAccount={handleDeleteAccount}
- *   onAddPosition={handleAddPosition}
- *   onEditPosition={handleEditPosition}
- *   onDeletePosition={handleDeletePosition}
- *   onRefresh={handleRefresh}
- *   onSearchInvestments={handleSearch}
- * />
- * ```
  */
 
-import React from "react";
-import { ActionPanel, Color, Icon, List } from "@raycast/api";
+import React, { useState, useMemo } from "react";
+import { ActionPanel, Action, Color, Icon, List } from "@raycast/api";
 import {
   Portfolio,
   PortfolioValuation,
   AccountValuation,
+  PositionValuation,
   Account,
   Position,
   PortfolioError,
   ErrorType,
+  SortField,
+  SortDirection,
 } from "../utils/types";
 import { formatCurrency, formatCurrencyCompact, formatRelativeTime } from "../utils/formatting";
+import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_COLORS, SORT_OPTIONS, DEFAULT_SORT_KEY } from "../utils/constants";
+import { hasSampleAccounts } from "../utils/sample-portfolio";
 
 import { EmptyPortfolio } from "./EmptyPortfolio";
 import { PositionListItem } from "./PositionListItem";
@@ -98,6 +83,9 @@ export interface PortfolioListProps {
   /** Navigate to the "Edit Position" form for a specific position */
   onEditPosition: (account: Account, position: Position) => void;
 
+  /** Navigate to the "Add Units" form for a specific position */
+  onAddUnits: (account: Account, position: Position) => void;
+
   /** Delete a position (parent handles confirmation if needed) */
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
 
@@ -106,6 +94,12 @@ export interface PortfolioListProps {
 
   /** Navigate to the standalone "Search Investments" command */
   onSearchInvestments?: () => void;
+
+  /** Load the sample portfolio into storage */
+  onLoadSample: () => void;
+
+  /** Remove all sample accounts from the portfolio (no confirmation) */
+  onRemoveSample: () => void;
 }
 
 // ──────────────────────────────────────────
@@ -122,15 +116,28 @@ export function PortfolioList({
   onDeleteAccount,
   onAddPosition,
   onEditPosition,
+  onAddUnits,
   onDeletePosition,
   onRefresh,
   onSearchInvestments,
+  onLoadSample,
+  onRemoveSample,
 }: PortfolioListProps): React.JSX.Element {
+  // ── Local UI State ──
+
+  const [isShowingDetail, setIsShowingDetail] = useState(false);
+  const [sortKey, setSortKey] = useState(DEFAULT_SORT_KEY);
+
+  // ── Derived State ──
+
   const hasAccounts = (portfolio?.accounts.length ?? 0) > 0;
   const hasPositions = portfolio?.accounts.some((a) => a.positions.length > 0) ?? false;
+  const showSampleBanner = hasAccounts && hasSampleAccounts(portfolio?.accounts ?? []);
+
+  // Resolve the current sort option from the key
+  const currentSort = SORT_OPTIONS.find((o) => o.key === sortKey) ?? SORT_OPTIONS[0];
 
   // ── Navigation Title ──
-  // Shows total portfolio value in the title bar for quick reference
 
   const navTitle = buildNavigationTitle(valuation, isLoading);
 
@@ -139,21 +146,71 @@ export function PortfolioList({
   const isOffline = errors.length > 0 && errors.every((e) => e.type === ErrorType.OFFLINE);
   const hasApiErrors = errors.some((e) => e.type === ErrorType.API_ERROR);
 
-  // ── Search Bar Placeholder ──
+  // ── Search Bar with Sort Dropdown ──
 
   const searchPlaceholder = hasAccounts ? "Filter accounts and positions..." : "Portfolio Tracker";
+
+  const searchBarAccessory = hasPositions ? (
+    <List.Dropdown tooltip="Sort positions" value={sortKey} onChange={setSortKey}>
+      <List.Dropdown.Section title="Sort By">
+        {SORT_OPTIONS.map((option) => (
+          <List.Dropdown.Item key={option.key} title={option.label} value={option.key} />
+        ))}
+      </List.Dropdown.Section>
+    </List.Dropdown>
+  ) : undefined;
+
+  // ── Toggle Detail Action (reused across items) ──
+
+  const toggleDetailAction = (
+    <Action
+      title={isShowingDetail ? "Hide Detail Panel" : "Show Detail Panel"}
+      icon={isShowingDetail ? Icon.EyeDisabled : Icon.Eye}
+      shortcut={{ modifiers: ["ctrl"], key: "d" }}
+      onAction={() => setIsShowingDetail((prev) => !prev)}
+    />
+  );
 
   // ── Render ──
 
   return (
     <List
       isLoading={isLoading}
-      isShowingDetail={hasPositions}
+      isShowingDetail={isShowingDetail && hasPositions}
       navigationTitle={navTitle}
       searchBarPlaceholder={searchPlaceholder}
+      searchBarAccessory={searchBarAccessory}
     >
       {/* ── Empty State ── */}
-      {!isLoading && !hasAccounts && <EmptyPortfolio onAddAccount={onAddAccount} />}
+      {!isLoading && !hasAccounts && <EmptyPortfolio onAddAccount={onAddAccount} onLoadSample={onLoadSample} />}
+
+      {/* ── Sample Portfolio Banner ── */}
+      {showSampleBanner && (
+        <List.Section title="👋 Sample Portfolio">
+          <List.Item
+            icon={{ source: Icon.Info, tintColor: Color.Blue }}
+            title="You're viewing sample data"
+            subtitle="This demo portfolio shows how the extension works."
+            keywords={["sample", "demo", "preview"]}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Hide Sample Portfolio"
+                  icon={Icon.EyeDisabled}
+                  style={Action.Style.Destructive}
+                  onAction={onRemoveSample}
+                />
+                <PortfolioActions
+                  onAddAccount={onAddAccount}
+                  onRefresh={onRefresh}
+                  onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
+                  toggleDetailAction={toggleDetailAction}
+                />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
 
       {/* ── Offline Banner ── */}
       {isOffline && (
@@ -168,6 +225,7 @@ export function PortfolioList({
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
                   onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
+                  toggleDetailAction={toggleDetailAction}
                 />
               </ActionPanel>
             }
@@ -198,6 +256,7 @@ export function PortfolioList({
                       onAddAccount={onAddAccount}
                       onRefresh={onRefresh}
                       onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
+                      toggleDetailAction={toggleDetailAction}
                     />
                   </ActionPanel>
                 }
@@ -206,84 +265,43 @@ export function PortfolioList({
         </List.Section>
       )}
 
-      {/* ── Account Sections ── */}
+      {/* ── Account Sections (with valuation data) ── */}
       {valuation?.accounts.map((accountVal) => (
         <AccountSection
           key={accountVal.account.id}
           accountValuation={accountVal}
           baseCurrency={valuation.baseCurrency}
+          sortField={currentSort.field}
+          sortDirection={currentSort.direction}
+          isShowingDetail={isShowingDetail}
+          toggleDetailAction={toggleDetailAction}
           onAddAccount={onAddAccount}
           onEditAccount={onEditAccount}
           onDeleteAccount={onDeleteAccount}
           onAddPosition={onAddPosition}
           onEditPosition={onEditPosition}
+          onAddUnits={onAddUnits}
           onDeletePosition={onDeletePosition}
           onRefresh={onRefresh}
           onSearchInvestments={onSearchInvestments}
         />
       ))}
 
-      {/* ── Accounts Without Valuation (fallback if valuation hasn't loaded yet) ── */}
+      {/* ── Accounts Without Valuation (fallback while loading) ── */}
       {!valuation &&
         portfolio?.accounts.map((account) => (
-          <List.Section
+          <FallbackAccountSection
             key={account.id}
-            title={account.name}
-            subtitle={`${account.positions.length} position${account.positions.length === 1 ? "" : "s"}`}
-          >
-            {account.positions.length === 0 ? (
-              <List.Item
-                icon={Icon.PlusCircle}
-                title="Add your first position"
-                subtitle="Search for stocks, ETFs, or funds"
-                actions={
-                  <ActionPanel>
-                    <AccountActions
-                      account={account}
-                      onAddPosition={() => onAddPosition(account.id)}
-                      onEditAccount={() => onEditAccount(account)}
-                      onDeleteAccount={() => onDeleteAccount(account.id)}
-                    />
-                    <PortfolioActions
-                      onAddAccount={onAddAccount}
-                      onRefresh={onRefresh}
-                      onSearchInvestments={onSearchInvestments}
-                    />
-                  </ActionPanel>
-                }
-              />
-            ) : (
-              account.positions.map((position) => (
-                <List.Item
-                  key={position.id}
-                  icon={Icon.CircleProgress}
-                  title={position.name}
-                  subtitle={`${position.symbol} · Loading...`}
-                  actions={
-                    <ActionPanel>
-                      <PositionActions
-                        position={position}
-                        accountId={account.id}
-                        onEditPosition={() => onEditPosition(account, position)}
-                        onDeletePosition={() => onDeletePosition(account.id, position.id)}
-                      />
-                      <AccountActions
-                        account={account}
-                        onAddPosition={() => onAddPosition(account.id)}
-                        onEditAccount={() => onEditAccount(account)}
-                        onDeleteAccount={() => onDeleteAccount(account.id)}
-                      />
-                      <PortfolioActions
-                        onAddAccount={onAddAccount}
-                        onRefresh={onRefresh}
-                        onSearchInvestments={onSearchInvestments}
-                      />
-                    </ActionPanel>
-                  }
-                />
-              ))
-            )}
-          </List.Section>
+            account={account}
+            isShowingDetail={isShowingDetail}
+            toggleDetailAction={toggleDetailAction}
+            onAddAccount={onAddAccount}
+            onEditAccount={onEditAccount}
+            onDeleteAccount={onDeleteAccount}
+            onAddPosition={onAddPosition}
+            onRefresh={onRefresh}
+            onSearchInvestments={onSearchInvestments}
+          />
         ))}
     </List>
   );
@@ -293,23 +311,19 @@ export function PortfolioList({
 // AccountSection Sub-Component
 // ──────────────────────────────────────────
 
-/**
- * Renders a single account as a List.Section containing its positions.
- *
- * Section title: account name
- * Section subtitle: total value in base currency
- *
- * If the account has no positions, shows a prompt to add the first one.
- */
-
 interface AccountSectionProps {
   accountValuation: AccountValuation;
   baseCurrency: string;
+  sortField: SortField;
+  sortDirection: SortDirection;
+  isShowingDetail: boolean;
+  toggleDetailAction: React.JSX.Element;
   onAddAccount: () => void;
   onEditAccount: (account: Account) => void;
   onDeleteAccount: (accountId: string) => Promise<void>;
   onAddPosition: (accountId: string) => void;
   onEditPosition: (account: Account, position: Position) => void;
+  onAddUnits: (account: Account, position: Position) => void;
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
   onRefresh: () => void;
   onSearchInvestments?: () => void;
@@ -318,23 +332,39 @@ interface AccountSectionProps {
 function AccountSection({
   accountValuation,
   baseCurrency,
+  sortField,
+  sortDirection,
+  isShowingDetail,
+  toggleDetailAction,
   onAddAccount,
   onEditAccount,
   onDeleteAccount,
   onAddPosition,
   onEditPosition,
+  onAddUnits,
   onDeletePosition,
   onRefresh,
   onSearchInvestments,
 }: AccountSectionProps): React.JSX.Element {
   const { account, positions, totalBaseValue } = accountValuation;
 
-  // Section subtitle: account total + position count
+  // ── Account Type Tag ──
+
+  const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
+  const typeColor = ACCOUNT_TYPE_COLORS[account.type] ?? Color.SecondaryText;
+
+  // Section subtitle: [Type Tag] · £12.3K · 4 positions
   const positionCount = positions.length;
   const sectionSubtitle =
     positionCount > 0
-      ? `${formatCurrencyCompact(totalBaseValue, baseCurrency)} · ${positionCount} position${positionCount === 1 ? "" : "s"}`
-      : "No positions";
+      ? `${typeLabel} · ${formatCurrencyCompact(totalBaseValue, baseCurrency)} · ${positionCount} position${positionCount === 1 ? "" : "s"}`
+      : `${typeLabel} · No positions`;
+
+  // ── Sort Positions ──
+
+  const sortedPositions = useMemo(() => {
+    return sortPositions(positions, sortField, sortDirection);
+  }, [positions, sortField, sortDirection]);
 
   return (
     <List.Section title={account.name} subtitle={sectionSubtitle}>
@@ -344,6 +374,7 @@ function AccountSection({
           icon={Icon.PlusCircle}
           title="Add your first position"
           subtitle="Search for stocks, ETFs, or funds"
+          keywords={[account.name, typeLabel]}
           actions={
             <ActionPanel>
               <AccountActions
@@ -356,23 +387,27 @@ function AccountSection({
                 onAddAccount={onAddAccount}
                 onRefresh={onRefresh}
                 onSearchInvestments={onSearchInvestments}
+                toggleDetailAction={toggleDetailAction}
               />
             </ActionPanel>
           }
         />
       )}
 
-      {/* ── Position Items ── */}
-      {positions.map((positionVal) => (
+      {/* ── Sorted Position Items ── */}
+      {sortedPositions.map((positionVal) => (
         <PositionListItem
           key={positionVal.position.id}
           valuation={positionVal}
           baseCurrency={baseCurrency}
+          accountName={account.name}
+          isShowingDetail={isShowingDetail}
           actions={
             <ActionPanel>
               <PositionActions
                 position={positionVal.position}
                 accountId={account.id}
+                onAddUnits={() => onAddUnits(account, positionVal.position)}
                 onEditPosition={() => onEditPosition(account, positionVal.position)}
                 onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
               />
@@ -386,13 +421,204 @@ function AccountSection({
                 onAddAccount={onAddAccount}
                 onRefresh={onRefresh}
                 onSearchInvestments={onSearchInvestments}
+                toggleDetailAction={toggleDetailAction}
               />
             </ActionPanel>
           }
         />
       ))}
+
+      {/* ── Account Summary Row (pinned to bottom) ── */}
+      {positionCount > 0 && (
+        <List.Item
+          icon={{ source: Icon.Coins, tintColor: typeColor }}
+          title={`${account.name} Total`}
+          subtitle={isShowingDetail ? formatCurrency(totalBaseValue, baseCurrency) : undefined}
+          keywords={[account.name, typeLabel, "total", "summary"]}
+          accessories={
+            isShowingDetail
+              ? undefined
+              : [
+                  {
+                    tag: { value: typeLabel, color: typeColor },
+                  },
+                  {
+                    text: { value: formatCurrency(totalBaseValue, baseCurrency), color: Color.PrimaryText },
+                    tooltip: `${account.name} total value`,
+                  },
+                ]
+          }
+          detail={
+            isShowingDetail ? (
+              <List.Item.Detail
+                metadata={
+                  <List.Item.Detail.Metadata>
+                    <List.Item.Detail.Metadata.Label title="Account" text={account.name} />
+                    <List.Item.Detail.Metadata.TagList title="Type">
+                      <List.Item.Detail.Metadata.TagList.Item text={typeLabel} color={typeColor} />
+                    </List.Item.Detail.Metadata.TagList>
+                    <List.Item.Detail.Metadata.Separator />
+                    <List.Item.Detail.Metadata.Label title="Positions" text={String(positionCount)} />
+                    <List.Item.Detail.Metadata.Label
+                      title="Total Value"
+                      text={formatCurrency(totalBaseValue, baseCurrency)}
+                    />
+                  </List.Item.Detail.Metadata>
+                }
+              />
+            ) : undefined
+          }
+          actions={
+            <ActionPanel>
+              <AccountActions
+                account={account}
+                onAddPosition={() => onAddPosition(account.id)}
+                onEditAccount={() => onEditAccount(account)}
+                onDeleteAccount={() => onDeleteAccount(account.id)}
+              />
+              <PortfolioActions
+                onAddAccount={onAddAccount}
+                onRefresh={onRefresh}
+                onSearchInvestments={onSearchInvestments}
+                toggleDetailAction={toggleDetailAction}
+              />
+            </ActionPanel>
+          }
+        />
+      )}
     </List.Section>
   );
+}
+
+// ──────────────────────────────────────────
+// FallbackAccountSection (no valuation yet)
+// ──────────────────────────────────────────
+
+interface FallbackAccountSectionProps {
+  account: Account;
+  isShowingDetail: boolean;
+  toggleDetailAction: React.JSX.Element;
+  onAddAccount: () => void;
+  onEditAccount: (account: Account) => void;
+  onDeleteAccount: (accountId: string) => Promise<void>;
+  onAddPosition: (accountId: string) => void;
+  onRefresh: () => void;
+  onSearchInvestments?: () => void;
+}
+
+function FallbackAccountSection({
+  account,
+  isShowingDetail,
+  toggleDetailAction,
+  onAddAccount,
+  onEditAccount,
+  onDeleteAccount,
+  onAddPosition,
+  onRefresh,
+  onSearchInvestments,
+}: FallbackAccountSectionProps): React.JSX.Element {
+  // isShowingDetail is received to satisfy the prop contract but not used here
+  // because fallback items have no valuation data for the detail panel.
+  void isShowingDetail;
+  const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
+
+  return (
+    <List.Section
+      key={account.id}
+      title={account.name}
+      subtitle={`${typeLabel} · ${account.positions.length} position${account.positions.length === 1 ? "" : "s"}`}
+    >
+      {account.positions.length === 0 ? (
+        <List.Item
+          icon={Icon.PlusCircle}
+          title="Add your first position"
+          subtitle="Search for stocks, ETFs, or funds"
+          keywords={[account.name, typeLabel]}
+          actions={
+            <ActionPanel>
+              <AccountActions
+                account={account}
+                onAddPosition={() => onAddPosition(account.id)}
+                onEditAccount={() => onEditAccount(account)}
+                onDeleteAccount={() => onDeleteAccount(account.id)}
+              />
+              <PortfolioActions
+                onAddAccount={onAddAccount}
+                onRefresh={onRefresh}
+                onSearchInvestments={onSearchInvestments}
+                toggleDetailAction={toggleDetailAction}
+              />
+            </ActionPanel>
+          }
+        />
+      ) : (
+        account.positions.map((position) => (
+          <List.Item
+            key={position.id}
+            icon={Icon.CircleProgress}
+            title={position.name}
+            subtitle={`${position.symbol} · Loading...`}
+            keywords={[position.symbol, account.name, typeLabel]}
+            actions={
+              <ActionPanel>
+                <AccountActions
+                  account={account}
+                  onAddPosition={() => onAddPosition(account.id)}
+                  onEditAccount={() => onEditAccount(account)}
+                  onDeleteAccount={() => onDeleteAccount(account.id)}
+                />
+                <PortfolioActions
+                  onAddAccount={onAddAccount}
+                  onRefresh={onRefresh}
+                  onSearchInvestments={onSearchInvestments}
+                  toggleDetailAction={toggleDetailAction}
+                />
+              </ActionPanel>
+            }
+          />
+        ))
+      )}
+    </List.Section>
+  );
+}
+
+// ──────────────────────────────────────────
+// Sorting
+// ──────────────────────────────────────────
+
+/**
+ * Sorts an array of PositionValuation by the given field and direction.
+ * Returns a new array (does not mutate the input).
+ */
+function sortPositions(
+  positions: PositionValuation[],
+  field: SortField,
+  direction: SortDirection,
+): PositionValuation[] {
+  const sorted = [...positions];
+
+  sorted.sort((a, b) => {
+    let valueA: number;
+    let valueB: number;
+
+    switch (field) {
+      case SortField.VALUE:
+        valueA = a.totalBaseValue;
+        valueB = b.totalBaseValue;
+        break;
+      case SortField.CHANGE:
+        valueA = a.changePercent;
+        valueB = b.changePercent;
+        break;
+      default:
+        valueA = a.totalBaseValue;
+        valueB = b.totalBaseValue;
+    }
+
+    return direction === SortDirection.DESC ? valueB - valueA : valueA - valueB;
+  });
+
+  return sorted;
 }
 
 // ──────────────────────────────────────────

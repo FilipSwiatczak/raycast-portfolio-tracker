@@ -3,12 +3,13 @@
  *
  * Per-position action panel items displayed when the user selects a specific
  * position (holding) within an account. Provides actions for managing the
- * individual position — editing units or removing it entirely.
+ * individual position — adding units, editing units, or removing it entirely.
  *
  * These actions are rendered as an ActionPanel.Section and can be composed
  * alongside PortfolioActions and AccountActions in the same ActionPanel.
  *
  * Features:
+ * - Add Units — navigates to a form to add purchased units to the position
  * - Edit Units — navigates to an edit form to change the number of units held
  * - Remove Position — removes the position with confirmation alert
  * - Copy Symbol — copies the Yahoo Finance symbol to clipboard
@@ -45,6 +46,12 @@ interface PositionActionsProps {
   accountId: string;
 
   /**
+   * Callback to navigate to the add-units form for this position.
+   * Typically pushes an AddUnitsForm onto the navigation stack.
+   */
+  onAddUnits: () => void;
+
+  /**
    * Callback to navigate to the edit form for this position.
    * Typically pushes an EditPositionForm onto the navigation stack.
    */
@@ -65,15 +72,17 @@ interface PositionActionsProps {
  * Per-position actions rendered in an ActionPanel.Section.
  *
  * Actions:
- * 1. Edit Units — modify the number of units held in this position
- * 2. Remove Position — delete with confirmation (destructive)
- * 3. Copy Symbol — copies the Yahoo Finance symbol to clipboard
- * 4. Copy Name — copies the asset name to clipboard
+ * 1. Add Units — increment the unit count (for periodic purchases)
+ * 2. Edit Units — set an absolute unit count
+ * 3. Remove Position — delete with confirmation (destructive)
+ * 4. Copy Symbol — copies the Yahoo Finance symbol to clipboard
+ * 5. Copy Name — copies the asset name to clipboard
  *
  * The delete action shows a confirmation alert before proceeding,
  * displaying the position name and current units for clarity.
  *
  * Keyboard shortcuts:
+ * - ⇧⌘U → Add Units
  * - ⌘E → Edit Units
  * - ⌃X → Remove Position (with confirmation)
  * - ⌘C → Copy Symbol
@@ -83,6 +92,7 @@ export function PositionActions({
   position,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
+  onAddUnits,
   onEditPosition,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
@@ -112,6 +122,13 @@ export function PositionActions({
   return (
     <>
       <ActionPanel.Section title={`${position.name} (${position.symbol})`}>
+        <Action
+          title="Add Units"
+          icon={Icon.PlusSquare}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "u" }}
+          onAction={onAddUnits}
+        />
+
         <Action
           title="Edit Units"
           icon={Icon.Pencil}
