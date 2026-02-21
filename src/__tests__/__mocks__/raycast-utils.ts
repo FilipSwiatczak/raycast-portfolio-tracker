@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
 /**
  * Mock for @raycast/utils module.
  *
@@ -35,7 +36,7 @@ export function useCachedPromise<T>(
     onData?: (data: T) => void;
     onError?: (error: Error) => void;
     onWillExecute?: () => void;
-  }
+  },
 ): {
   data: T | undefined;
   isLoading: boolean;
@@ -43,7 +44,7 @@ export function useCachedPromise<T>(
   revalidate: () => void;
   mutate: (
     asyncUpdate?: Promise<T>,
-    options?: { optimisticUpdate?: (data: T | undefined) => T | undefined }
+    options?: { optimisticUpdate?: (data: T | undefined) => T | undefined },
   ) => Promise<T | undefined>;
 } {
   const initialData = _options?.initialData;
@@ -80,7 +81,7 @@ export function usePromise<T>(
     onData?: (data: T) => void;
     onError?: (error: Error) => void;
     onWillExecute?: () => void;
-  }
+  },
 ): {
   data: T | undefined;
   isLoading: boolean;
@@ -88,7 +89,7 @@ export function usePromise<T>(
   revalidate: () => void;
   mutate: (
     asyncUpdate?: Promise<T>,
-    options?: { optimisticUpdate?: (data: T | undefined) => T | undefined }
+    options?: { optimisticUpdate?: (data: T | undefined) => T | undefined },
   ) => Promise<T | undefined>;
 } {
   return {
@@ -118,7 +119,7 @@ export function usePromise<T>(
  */
 export function useFetch<T>(
   _url: string,
-  _options?: Record<string, unknown>
+  _options?: Record<string, unknown>,
 ): {
   data: T | undefined;
   isLoading: boolean;
@@ -144,7 +145,7 @@ export function useFetch<T>(
  */
 export function useLocalStorage<T>(
   _key: string,
-  initialValue?: T
+  initialValue?: T,
 ): {
   value: T | undefined;
   setValue: (value: T) => Promise<void>;
@@ -169,7 +170,7 @@ export function useLocalStorage<T>(
  */
 export async function showFailureToast(
   _error: unknown,
-  _options?: { title?: string; message?: string }
+  _options?: { title?: string; message?: string },
 ): Promise<void> {
   // No-op in test environment
 }
@@ -192,9 +193,6 @@ export async function runAppleScript(_script: string): Promise<string> {
 /**
  * Mock for `getFavicon`. Returns a placeholder URL string.
  */
-export function getFavicon(
-  _url: string,
-  _options?: { fallback?: string }
-): string {
+export function getFavicon(_url: string, _options?: { fallback?: string }): string {
   return "https://placeholder.test/favicon.png";
 }

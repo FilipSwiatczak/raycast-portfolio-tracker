@@ -30,7 +30,7 @@
 import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
 import { Position } from "../../utils/types";
-import { ASSET_TYPE_LABELS } from "../../utils/constants";
+
 import { formatUnits } from "../../utils/formatting";
 
 // ──────────────────────────────────────────
@@ -81,12 +81,11 @@ interface PositionActionsProps {
  */
 export function PositionActions({
   position,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
   onEditPosition,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
-  const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Position";
-
   /**
    * Shows a confirmation dialog before removing the position.
    * Displays the asset name and current unit count for the user to verify.

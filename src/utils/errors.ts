@@ -229,10 +229,7 @@ export function isPortfolioError(value: unknown): value is PortfolioError {
 /**
  * Type-safe property check for unknown objects.
  */
-function hasProperty<K extends string>(
-  obj: unknown,
-  key: K
-): obj is Record<K, unknown> {
+function hasProperty<K extends string>(obj: unknown, key: K): obj is Record<K, unknown> {
   return typeof obj === "object" && obj !== null && key in obj;
 }
 

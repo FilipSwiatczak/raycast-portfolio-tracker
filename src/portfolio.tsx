@@ -16,7 +16,7 @@
 
 import React from "react";
 import { useEffect } from "react";
-import { LaunchProps, useNavigation, updateCommandMetadata } from "@raycast/api";
+import { useNavigation, updateCommandMetadata } from "@raycast/api";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { usePortfolioValue } from "./hooks/usePortfolioValue";
 import { PortfolioList } from "./components/PortfolioList";
@@ -78,7 +78,7 @@ export default function PortfolioCommand(): React.JSX.Element {
         onSubmit={async (name: string, type: AccountType) => {
           await addAccount(name, type);
         }}
-      />
+      />,
     );
   }
 
@@ -89,7 +89,7 @@ export default function PortfolioCommand(): React.JSX.Element {
         onSubmit={async (name: string, type: AccountType) => {
           await updateAccount(account.id, { name, type });
         }}
-      />
+      />,
     );
   }
 
@@ -108,7 +108,7 @@ export default function PortfolioCommand(): React.JSX.Element {
         onConfirm={async (params) => {
           await addPosition(accountId, params);
         }}
-      />
+      />,
     );
   }
 
@@ -121,14 +121,11 @@ export default function PortfolioCommand(): React.JSX.Element {
         onSubmit={async (units: number) => {
           await updatePosition(account.id, position.id, units);
         }}
-      />
+      />,
     );
   }
 
-  async function handleDeletePosition(
-    accountId: string,
-    positionId: string
-  ): Promise<void> {
+  async function handleDeletePosition(accountId: string, positionId: string): Promise<void> {
     await removePosition(accountId, positionId);
   }
 
@@ -155,7 +152,7 @@ export default function PortfolioCommand(): React.JSX.Element {
           onConfirm={async (params) => {
             await addPosition(accounts[0].id, params);
           }}
-        />
+        />,
       );
     }
   }
@@ -175,9 +172,7 @@ export default function PortfolioCommand(): React.JSX.Element {
       onEditPosition={handleEditPosition}
       onDeletePosition={handleDeletePosition}
       onRefresh={handleRefresh}
-      onSearchInvestments={
-        (portfolio?.accounts.length ?? 0) > 0 ? handleSearchInvestments : undefined
-      }
+      onSearchInvestments={(portfolio?.accounts.length ?? 0) > 0 ? handleSearchInvestments : undefined}
     />
   );
 }

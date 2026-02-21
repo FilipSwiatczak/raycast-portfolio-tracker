@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
 /**
  * Mock for @raycast/api module.
  *
@@ -60,9 +61,7 @@ export class Cache {
     }
   }
 
-  subscribe(
-    subscriber: (key: string | undefined, data: string | undefined) => void
-  ): () => void {
+  subscribe(subscriber: (key: string | undefined, data: string | undefined) => void): () => void {
     this.subscribers.push(subscriber);
     return () => {
       this.subscribers = this.subscribers.filter((s) => s !== subscriber);
@@ -87,9 +86,7 @@ export class Cache {
 const localStorageStore = new Map<string, string | number | boolean>();
 
 export const LocalStorage = {
-  async getItem<T extends string | number | boolean = string>(
-    key: string
-  ): Promise<T | undefined> {
+  async getItem<T extends string | number | boolean = string>(key: string): Promise<T | undefined> {
     return localStorageStore.get(key) as T | undefined;
   },
 
@@ -165,9 +162,7 @@ export function _setMockPreferences(prefs: Record<string, unknown>): void {
 // Command Metadata
 // ──────────────────────────────────────────
 
-export async function updateCommandMetadata(_metadata: {
-  subtitle?: string;
-}): Promise<void> {
+export async function updateCommandMetadata(_metadata: { subtitle?: string }): Promise<void> {
   // No-op in tests
 }
 
@@ -227,7 +222,7 @@ export const Icon = new Proxy(
     get(_target, prop) {
       return String(prop);
     },
-  }
+  },
 ) as Record<string, string>;
 
 export const Color = {
@@ -257,12 +252,9 @@ export const List = Object.assign(createComponentStub("List"), {
       Metadata: Object.assign(createComponentStub("List.Item.Detail.Metadata"), {
         Label: createComponentStub("List.Item.Detail.Metadata.Label"),
         Link: createComponentStub("List.Item.Detail.Metadata.Link"),
-        TagList: Object.assign(
-          createComponentStub("List.Item.Detail.Metadata.TagList"),
-          {
-            Item: createComponentStub("List.Item.Detail.Metadata.TagList.Item"),
-          }
-        ),
+        TagList: Object.assign(createComponentStub("List.Item.Detail.Metadata.TagList"), {
+          Item: createComponentStub("List.Item.Detail.Metadata.TagList.Item"),
+        }),
         Separator: createComponentStub("List.Item.Detail.Metadata.Separator"),
       }),
     }),

@@ -13,7 +13,7 @@
  */
 
 import { LocalStorage } from "@raycast/api";
-import { Portfolio, Account, Position } from "./types";
+import { Portfolio, Account } from "./types";
 import { STORAGE_KEYS } from "./constants";
 
 // ──────────────────────────────────────────
@@ -141,9 +141,7 @@ export async function clearPortfolio(): Promise<void> {
  *   ),
  * }));
  */
-export async function mutatePortfolio(
-  mutate: (current: Portfolio) => Portfolio
-): Promise<Portfolio> {
+export async function mutatePortfolio(mutate: (current: Portfolio) => Portfolio): Promise<Portfolio> {
   const current = await loadPortfolio();
   const updated = mutate(current);
   await savePortfolio(updated);

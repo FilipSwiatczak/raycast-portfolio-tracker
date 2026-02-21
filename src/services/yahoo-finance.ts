@@ -18,13 +18,13 @@
 import YahooFinance from "yahoo-finance2";
 import { AssetSearchResult, AssetQuote, AssetType } from "../utils/types";
 import { normaliseCurrencyPrice } from "../utils/formatting";
-import { SEARCH_MAX_RESULTS, API_TIMEOUT_MS } from "../utils/constants";
+import { SEARCH_MAX_RESULTS } from "../utils/constants";
 
 // ──────────────────────────────────────────
 // Singleton Yahoo Finance Instance
 // ──────────────────────────────────────────
 
-const yf = new YahooFinance();
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 // ──────────────────────────────────────────
 // Search
@@ -77,6 +77,11 @@ export async function searchAssets(query: string): Promise<AssetSearchResult[]> 
 /**
  * Fetches the current price quote for a single symbol.
  *
+ * Uses `quoteSummary` with the `price` module instead of the `quote` endpoint
+ * to bypass Yahoo Finance's broken consent/crumb flow (the `quote` endpoint
+ * requires a crumb obtained via cookie consent which fails in non-browser
+ * environments — see yahoo-finance2 issue #741).
+ *
  * Handles minor currency normalisation (e.g. GBp → GBP) automatically.
  *
  * @param symbol - Yahoo Finance symbol (e.g. "VUSA.L", "AAPL", "MSFT")
@@ -88,7 +93,8 @@ export async function searchAssets(query: string): Promise<AssetSearchResult[]> 
  * // { symbol: "VUSA.L", name: "Vanguard S&P 500 UCITS ETF", price: 72.45, currency: "GBP", ... }
  */
 export async function getQuote(symbol: string): Promise<AssetQuote> {
-  const q = await yf.quote(symbol);
+  const summary = await yf.quoteSummary(symbol, { modules: ["price"] });
+  const q = summary.price;
 
   if (!q || q.regularMarketPrice === undefined || q.regularMarketPrice === null) {
     throw new Error(`No price data available for symbol: ${symbol}`);
@@ -181,7 +187,8 @@ export async function getFxRate(from: string, to: string): Promise<number> {
 
   const symbol = `${from}${to}=X`;
 
-  const q = await yf.quote(symbol);
+  const summary = await yf.quoteSummary(symbol, { modules: ["price"] });
+  const q = summary.price;
 
   if (!q || q.regularMarketPrice === undefined || q.regularMarketPrice === null) {
     throw new Error(`No FX rate data available for ${from}→${to} (symbol: ${symbol})`);

@@ -44,7 +44,7 @@ export function getCurrencySymbol(currencyCode: string): string {
 export function formatCurrency(
   amount: number,
   currencyCode: string,
-  options?: { decimals?: number; showSign?: boolean }
+  options?: { decimals?: number; showSign?: boolean },
 ): string {
   const decimals = options?.decimals ?? CURRENCY_DECIMALS;
   const showSign = options?.showSign ?? false;
@@ -151,10 +151,7 @@ export function formatUnits(units: number): string {
  * formatPercent(-0.5)   // "-0.50%"
  * formatPercent(0)      // "0.00%"
  */
-export function formatPercent(
-  value: number,
-  options?: { decimals?: number; showSign?: boolean }
-): string {
+export function formatPercent(value: number, options?: { decimals?: number; showSign?: boolean }): string {
   const decimals = options?.decimals ?? PERCENT_DECIMALS;
   const showSign = options?.showSign ?? true;
 
@@ -236,10 +233,7 @@ export function getTodayDateKey(): string {
  * normaliseCurrencyPrice(7245, "GBp")  // { price: 72.45, currency: "GBP" }
  * normaliseCurrencyPrice(234.5, "USD") // { price: 234.5, currency: "USD" }
  */
-export function normaliseCurrencyPrice(
-  price: number,
-  currency: string
-): { price: number; currency: string } {
+export function normaliseCurrencyPrice(price: number, currency: string): { price: number; currency: string } {
   const minor = MINOR_CURRENCY_FACTORS[currency];
   if (minor) {
     return {

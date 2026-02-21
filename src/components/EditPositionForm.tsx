@@ -29,7 +29,7 @@ import { useState } from "react";
 import { Position } from "../utils/types";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { validateUnits, parseUnits } from "../utils/validation";
-import { formatUnits, formatCurrency } from "../utils/formatting";
+import { formatUnits } from "../utils/formatting";
 
 // ──────────────────────────────────────────
 // Props
@@ -69,6 +69,7 @@ interface EditPositionFormProps {
  */
 export function EditPositionForm({
   position,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
   accountName,
   onSubmit,
@@ -147,17 +148,8 @@ export function EditPositionForm({
       isLoading={isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Save Changes"
-            icon={Icon.Check}
-            onSubmit={handleSubmit}
-          />
-          <Action
-            title="Cancel"
-            icon={Icon.XMarkCircle}
-            onAction={pop}
-            shortcut={{ modifiers: ["cmd"], key: "." }}
-          />
+          <Action.SubmitForm title="Save Changes" icon={Icon.Check} onSubmit={handleSubmit} />
+          <Action title="Cancel" icon={Icon.XMarkCircle} onAction={pop} shortcut={{ modifiers: ["cmd"], key: "." }} />
         </ActionPanel>
       }
     >

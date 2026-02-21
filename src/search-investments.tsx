@@ -17,22 +17,16 @@ import React from "react";
 import { useNavigation, showToast, Toast } from "@raycast/api";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
-import { AccountForm } from "./components/AccountForm";
-import { AssetType, AccountType } from "./utils/types";
+import { AssetType } from "./utils/types";
 
 // ──────────────────────────────────────────
 // Command Component
 // ──────────────────────────────────────────
 
 export default function SearchInvestmentsCommand(): React.JSX.Element {
-  const { push } = useNavigation();
+  useNavigation();
 
-  const {
-    portfolio,
-    isLoading,
-    addAccount,
-    addPosition,
-  } = usePortfolio();
+  const { portfolio, isLoading, addPosition } = usePortfolio();
 
   const accounts = portfolio?.accounts ?? [];
   const hasAccounts = accounts.length > 0;
@@ -72,16 +66,10 @@ export default function SearchInvestmentsCommand(): React.JSX.Element {
   // search view but without the ability to add positions.
 
   if (!hasAccounts && !isLoading) {
-    return (
-      <SearchInvestmentsView />
-    );
+    return <SearchInvestmentsView />;
   }
 
   return (
-    <SearchInvestmentsView
-      accountId={targetAccount?.id}
-      accountName={targetAccount?.name}
-      onConfirm={handleConfirm}
-    />
+    <SearchInvestmentsView accountId={targetAccount?.id} accountName={targetAccount?.name} onConfirm={handleConfirm} />
   );
 }

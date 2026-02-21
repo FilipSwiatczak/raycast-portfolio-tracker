@@ -165,7 +165,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
 
       // Collect errors from price fetches
       const fetchErrors: PortfolioError[] = priceResult.errors.map(({ symbol, error }) =>
-        createPortfolioError(error, symbol)
+        createPortfolioError(error, symbol),
       );
 
       setErrors(fetchErrors);
@@ -215,10 +215,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
         };
       });
 
-      const accountTotal = positionValuations.reduce(
-        (sum, pv) => sum + pv.totalBaseValue,
-        0
-      );
+      const accountTotal = positionValuations.reduce((sum, pv) => sum + pv.totalBaseValue, 0);
 
       return {
         account,
@@ -227,10 +224,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       };
     });
 
-    const grandTotal = accountValuations.reduce(
-      (sum, av) => sum + av.totalBaseValue,
-      0
-    );
+    const grandTotal = accountValuations.reduce((sum, av) => sum + av.totalBaseValue, 0);
 
     // Determine the most recent fetch timestamp across all prices
     let latestFetch = "";
@@ -277,9 +271,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
 export function hasAnyPricedPositions(valuation: PortfolioValuation | undefined): boolean {
   if (!valuation) return false;
 
-  return valuation.accounts.some((av) =>
-    av.positions.some((pv) => pv.currentPrice > 0)
-  );
+  return valuation.accounts.some((av) => av.positions.some((pv) => pv.currentPrice > 0));
 }
 
 /**

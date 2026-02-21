@@ -90,13 +90,11 @@ export function useAssetPrice(symbol: string | undefined): UseAssetPriceReturn {
       // This means the UI renders with data immediately on cache hit,
       // without waiting for the async path.
       initialData: shouldFetch && symbol ? getCachedPriceSync(symbol) : undefined,
-    }
+    },
   );
 
   // Convert raw error to our structured PortfolioError type
-  const error: PortfolioError | undefined = rawError
-    ? createPortfolioError(rawError, symbol)
-    : undefined;
+  const error: PortfolioError | undefined = rawError ? createPortfolioError(rawError, symbol) : undefined;
 
   return {
     price,
@@ -171,7 +169,7 @@ export function useAssetPrices(symbols: string[]): UseAssetPricesReturn {
     {
       execute: shouldFetch,
       keepPreviousData: true,
-    }
+    },
   );
 
   // Reconstruct the Map from the serialised entries

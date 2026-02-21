@@ -39,7 +39,7 @@ import { useState, useMemo } from "react";
 import { AssetSearchResult, AssetType } from "../utils/types";
 import { useAssetPrice } from "../hooks/useAssetPrice";
 import { validateUnits, parseUnits } from "../utils/validation";
-import { formatCurrency, formatPercent, formatDate } from "../utils/formatting";
+import { formatCurrency, formatPercent } from "../utils/formatting";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
 
@@ -83,6 +83,7 @@ interface AssetConfirmationProps {
  */
 export function AssetConfirmation({
   result,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
   accountName,
   onConfirm,
@@ -90,7 +91,9 @@ export function AssetConfirmation({
   const { pop } = useNavigation();
   const { price, isLoading: isPriceLoading, error: priceError } = useAssetPrice(result.symbol);
 
-  const [unitsInput, setUnitsInput] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- WIP: Detail variant doesn't yet have embedded form fields
+  const [unitsInput, _setUnitsInput] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- set in handleSubmit but not rendered in Detail variant yet
   const [unitsError, setUnitsError] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -109,29 +112,16 @@ export function AssetConfirmation({
     return parsedUnits * price.price;
   }, [price, parsedUnits]);
 
-  /** The currency to use (from price data, or fallback) */
-  const currency = price?.currency ?? "USD";
-
   /** Colour for the price change indicator */
-  const changeColor =
-    !price ? COLOR_NEUTRAL : price.change > 0 ? COLOR_POSITIVE : price.change < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL;
+  const changeColor = !price
+    ? COLOR_NEUTRAL
+    : price.change > 0
+      ? COLOR_POSITIVE
+      : price.change < 0
+        ? COLOR_NEGATIVE
+        : COLOR_NEUTRAL;
 
   // ── Handlers ──
-
-  function handleUnitsChange(value: string) {
-    setUnitsInput(value);
-    // Clear error as soon as user types
-    if (unitsError) {
-      setUnitsError(undefined);
-    }
-  }
-
-  function handleUnitsBlur() {
-    if (unitsInput.trim().length > 0) {
-      const error = validateUnits(unitsInput);
-      setUnitsError(error);
-    }
-  }
 
   async function handleSubmit() {
     // Validate units
@@ -205,10 +195,7 @@ export function AssetConfirmation({
               <Detail.Metadata.Separator />
 
               {/* ── Price Info ── */}
-              <Detail.Metadata.Label
-                title="Current Price"
-                text={formatCurrency(price.price, price.currency)}
-              />
+              <Detail.Metadata.Label title="Current Price" text={formatCurrency(price.price, price.currency)} />
               <Detail.Metadata.Label title="Currency" text={price.currency} />
               <Detail.Metadata.Label
                 title="Day Change"
@@ -227,10 +214,7 @@ export function AssetConfirmation({
 
           {parsedUnits > 0 && price && (
             <>
-              <Detail.Metadata.Label
-                title="Units"
-                text={String(parsedUnits)}
-              />
+              <Detail.Metadata.Label title="Units" text={String(parsedUnits)} />
               <Detail.Metadata.Label
                 title="Estimated Value"
                 text={{
@@ -245,19 +229,10 @@ export function AssetConfirmation({
       actions={
         <ActionPanel>
           <ActionPanel.Section title="Add Position">
-            <Action
-              title="Confirm & Add Position"
-              icon={Icon.PlusCircle}
-              onAction={handleSubmit}
-            />
+            <Action title="Confirm & Add Position" icon={Icon.PlusCircle} onAction={handleSubmit} />
           </ActionPanel.Section>
           <ActionPanel.Section>
-            <Action
-              title="Go Back"
-              icon={Icon.ArrowLeft}
-              onAction={pop}
-              shortcut={{ modifiers: ["cmd"], key: "[" }}
-            />
+            <Action title="Go Back" icon={Icon.ArrowLeft} onAction={pop} shortcut={{ modifiers: ["cmd"], key: "[" }} />
           </ActionPanel.Section>
         </ActionPanel>
       }
@@ -283,6 +258,7 @@ export function AssetConfirmation({
  */
 export function AssetConfirmationForm({
   result,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
   accountName,
   onConfirm,
@@ -360,17 +336,8 @@ export function AssetConfirmationForm({
       isLoading={isPriceLoading || isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Add to Portfolio"
-            icon={Icon.PlusCircle}
-            onSubmit={handleSubmit}
-          />
-          <Action
-            title="Go Back"
-            icon={Icon.ArrowLeft}
-            onAction={pop}
-            shortcut={{ modifiers: ["cmd"], key: "[" }}
-          />
+          <Action.SubmitForm title="Add to Portfolio" icon={Icon.PlusCircle} onSubmit={handleSubmit} />
+          <Action title="Go Back" icon={Icon.ArrowLeft} onAction={pop} shortcut={{ modifiers: ["cmd"], key: "[" }} />
         </ActionPanel>
       }
     >
@@ -380,16 +347,9 @@ export function AssetConfirmationForm({
       <Form.Description title="Type" text={`${typeLabel} · ${result.exchange}`} />
       <Form.Description title="Price" text={priceDisplay} />
 
-      {price && price.change !== 0 && (
-        <Form.Description title="Day Change" text={changeDisplay} />
-      )}
+      {price && price.change !== 0 && <Form.Description title="Day Change" text={changeDisplay} />}
 
-      {priceError && (
-        <Form.Description
-          title="⚠️ Warning"
-          text={`Price data may be stale: ${priceError.message}`}
-        />
-      )}
+      {priceError && <Form.Description title="⚠️ Warning" text={`Price data may be stale: ${priceError.message}`} />}
 
       <Form.Separator />
 
@@ -428,7 +388,7 @@ export function AssetConfirmationForm({
 function buildAssetMarkdown(
   result: AssetSearchResult,
   price: { price: number; currency: string; name: string; change: number; changePercent: number } | undefined,
-  isLoading: boolean
+  isLoading: boolean,
 ): string {
   const lines: string[] = [];
 
@@ -445,12 +405,14 @@ function buildAssetMarkdown(
 
     const changeSign = price.change >= 0 ? "+" : "";
     lines.push(
-      `${changeSign}${formatCurrency(price.change, price.currency)} (${formatPercent(price.changePercent)}) today`
+      `${changeSign}${formatCurrency(price.change, price.currency)} (${formatPercent(price.changePercent)}) today`,
     );
     lines.push("");
     lines.push("---");
     lines.push("");
-    lines.push("Use the **Confirm & Add Position** action to specify the number of units and add this to your portfolio.");
+    lines.push(
+      "Use the **Confirm & Add Position** action to specify the number of units and add this to your portfolio.",
+    );
   } else {
     lines.push("*Price data unavailable*");
   }

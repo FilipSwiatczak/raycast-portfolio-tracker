@@ -51,18 +51,13 @@ import {
   Portfolio,
   PortfolioValuation,
   AccountValuation,
-  PositionValuation,
   Account,
   Position,
   PortfolioError,
   ErrorType,
 } from "../utils/types";
-import {
-  formatCurrency,
-  formatCurrencyCompact,
-  formatRelativeTime,
-} from "../utils/formatting";
-import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
+import { formatCurrency, formatCurrencyCompact, formatRelativeTime } from "../utils/formatting";
+
 import { EmptyPortfolio } from "./EmptyPortfolio";
 import { PositionListItem } from "./PositionListItem";
 import { PortfolioActions } from "./actions/PortfolioActions";
@@ -132,8 +127,7 @@ export function PortfolioList({
   onSearchInvestments,
 }: PortfolioListProps): React.JSX.Element {
   const hasAccounts = (portfolio?.accounts.length ?? 0) > 0;
-  const hasPositions =
-    portfolio?.accounts.some((a) => a.positions.length > 0) ?? false;
+  const hasPositions = portfolio?.accounts.some((a) => a.positions.length > 0) ?? false;
 
   // ── Navigation Title ──
   // Shows total portfolio value in the title bar for quick reference
@@ -147,9 +141,7 @@ export function PortfolioList({
 
   // ── Search Bar Placeholder ──
 
-  const searchPlaceholder = hasAccounts
-    ? "Filter accounts and positions..."
-    : "Portfolio Tracker";
+  const searchPlaceholder = hasAccounts ? "Filter accounts and positions..." : "Portfolio Tracker";
 
   // ── Render ──
 
@@ -161,9 +153,7 @@ export function PortfolioList({
       searchBarPlaceholder={searchPlaceholder}
     >
       {/* ── Empty State ── */}
-      {!isLoading && !hasAccounts && (
-        <EmptyPortfolio onAddAccount={onAddAccount} />
-      )}
+      {!isLoading && !hasAccounts && <EmptyPortfolio onAddAccount={onAddAccount} />}
 
       {/* ── Offline Banner ── */}
       {isOffline && (
@@ -275,9 +265,7 @@ export function PortfolioList({
                         position={position}
                         accountId={account.id}
                         onEditPosition={() => onEditPosition(account, position)}
-                        onDeletePosition={() =>
-                          onDeletePosition(account.id, position.id)
-                        }
+                        onDeletePosition={() => onDeletePosition(account.id, position.id)}
                       />
                       <AccountActions
                         account={account}
@@ -385,12 +373,8 @@ function AccountSection({
               <PositionActions
                 position={positionVal.position}
                 accountId={account.id}
-                onEditPosition={() =>
-                  onEditPosition(account, positionVal.position)
-                }
-                onDeletePosition={() =>
-                  onDeletePosition(account.id, positionVal.position.id)
-                }
+                onEditPosition={() => onEditPosition(account, positionVal.position)}
+                onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
               />
               <AccountActions
                 account={account}
@@ -423,10 +407,7 @@ function AccountSection({
  * - With data: "Portfolio Tracker — £142,350.00"
  * - Empty: "Portfolio Tracker — £0.00"
  */
-function buildNavigationTitle(
-  valuation: PortfolioValuation | undefined,
-  isLoading: boolean
-): string {
+function buildNavigationTitle(valuation: PortfolioValuation | undefined, isLoading: boolean): string {
   const base = "Portfolio Tracker";
 
   if (isLoading && !valuation) {
@@ -437,10 +418,7 @@ function buildNavigationTitle(
     return base;
   }
 
-  const totalFormatted = formatCurrency(
-    valuation.totalValue,
-    valuation.baseCurrency
-  );
+  const totalFormatted = formatCurrency(valuation.totalValue, valuation.baseCurrency);
 
   return `${base} — ${totalFormatted}`;
 }

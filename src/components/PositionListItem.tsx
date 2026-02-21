@@ -44,14 +44,7 @@
 import React from "react";
 import { Color, Icon, List } from "@raycast/api";
 import { PositionValuation, AssetType } from "../utils/types";
-import {
-  formatCurrency,
-  formatCurrencyCompact,
-  formatPercent,
-  formatUnits,
-  formatDate,
-  formatRelativeTime,
-} from "../utils/formatting";
+import { formatCurrency, formatCurrencyCompact, formatPercent, formatUnits, formatDate } from "../utils/formatting";
 import { ASSET_TYPE_LABELS, COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
 
 // ──────────────────────────────────────────
@@ -104,13 +97,8 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
  * Detail panel (right side when `isShowingDetail` is true on the parent List):
  * - Price, change, units, values, FX rate, and date metadata
  */
-export function PositionListItem({
-  valuation,
-  baseCurrency,
-  actions,
-}: PositionListItemProps): React.JSX.Element {
-  const { position, currentPrice, totalNativeValue, totalBaseValue, change, changePercent, fxRate } =
-    valuation;
+export function PositionListItem({ valuation, baseCurrency, actions }: PositionListItemProps): React.JSX.Element {
+  const { position, currentPrice, totalNativeValue, totalBaseValue, change, changePercent, fxRate } = valuation;
 
   // ── Computed Display Values ──
 
@@ -121,8 +109,7 @@ export function PositionListItem({
   const hasPrice = currentPrice > 0;
 
   // Change colour
-  const changeColor =
-    changePercent > 0 ? COLOR_POSITIVE : changePercent < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL;
+  const changeColor = changePercent > 0 ? COLOR_POSITIVE : changePercent < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL;
 
   // Subtitle: symbol + units
   const subtitle = `${position.symbol} · ${formatUnits(position.units)} units`;
@@ -196,10 +183,7 @@ export function PositionListItem({
           <List.Item.Detail.Metadata.Separator />
 
           {/* ── Holdings ── */}
-          <List.Item.Detail.Metadata.Label
-            title="Units Held"
-            text={formatUnits(position.units)}
-          />
+          <List.Item.Detail.Metadata.Label title="Units Held" text={formatUnits(position.units)} />
 
           {hasPrice && (
             <>
@@ -227,10 +211,7 @@ export function PositionListItem({
 
           {/* ── Metadata ── */}
           <List.Item.Detail.Metadata.Label title="Currency" text={position.currency} />
-          <List.Item.Detail.Metadata.Label
-            title="Added"
-            text={formatDate(position.addedAt)}
-          />
+          <List.Item.Detail.Metadata.Label title="Added" text={formatDate(position.addedAt)} />
         </List.Item.Detail.Metadata>
       }
     />

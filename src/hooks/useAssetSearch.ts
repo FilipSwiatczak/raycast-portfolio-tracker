@@ -67,10 +67,7 @@ export interface UseAssetSearchReturn {
  *   );
  * }
  */
-export function useAssetSearch(
-  query: string,
-  debounceMs: number = SEARCH_DEBOUNCE_MS
-): UseAssetSearchReturn {
+export function useAssetSearch(query: string, debounceMs: number = SEARCH_DEBOUNCE_MS): UseAssetSearchReturn {
   const [results, setResults] = useState<AssetSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<PortfolioError | undefined>(undefined);

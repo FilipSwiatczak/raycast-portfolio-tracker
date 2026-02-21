@@ -140,17 +140,9 @@ export function AccountForm({ account, onSubmit }: AccountFormProps): React.JSX.
         autoFocus
       />
 
-      <Form.Dropdown
-        id="accountType"
-        title="Account Type"
-        defaultValue={account?.type ?? AccountType.GIA}
-      >
+      <Form.Dropdown id="accountType" title="Account Type" defaultValue={account?.type ?? AccountType.GIA}>
         {ACCOUNT_TYPE_OPTIONS.map((option) => (
-          <Form.Dropdown.Item
-            key={option.value}
-            value={option.value}
-            title={option.title}
-          />
+          <Form.Dropdown.Item key={option.value} value={option.value} title={option.title} />
         ))}
       </Form.Dropdown>
 

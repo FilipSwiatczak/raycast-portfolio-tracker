@@ -44,11 +44,7 @@ export function EmptyPortfolio({ onAddAccount }: EmptyPortfolioProps): React.JSX
       description="Add your first investment account to start tracking your net worth. You can create accounts for ISAs, SIPPs, brokerages, and more."
       actions={
         <ActionPanel>
-          <Action
-            title="Add Account"
-            icon={Icon.PlusCircle}
-            onAction={onAddAccount}
-          />
+          <Action title="Add Account" icon={Icon.PlusCircle} onAction={onAddAccount} />
         </ActionPanel>
       }
     />

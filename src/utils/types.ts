@@ -12,6 +12,7 @@
 /** Supported investment account types */
 export enum AccountType {
   ISA = "ISA",
+  LISA = "LISA",
   SIPP = "SIPP",
   GIA = "GIA",
   _401K = "401K",

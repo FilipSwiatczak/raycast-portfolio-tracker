@@ -139,7 +139,7 @@ export function SearchInvestmentsView({
         accountId={accountId!}
         accountName={accountName ?? "Account"}
         onConfirm={onConfirm!}
-      />
+      />,
     );
   }
 
@@ -166,7 +166,7 @@ export function SearchInvestmentsView({
           icon={Icon.MagnifyingGlass}
           title="Search for Investments"
           description={
-            "Type a name, ticker, or ISIN to find stocks, ETFs, and funds.\n\nExamples: \"S&P 500\", \"AAPL\", \"Vanguard\""
+            'Type a name, ticker, or ISIN to find stocks, ETFs, and funds.\n\nExamples: "S&P 500", "AAPL", "Vanguard"'
           }
         />
       )}
@@ -183,20 +183,10 @@ export function SearchInvestmentsView({
       {/* ── Error State ── */}
       {hasError && !hasResults && (
         <List.EmptyView
-          icon={
-            error.type === ErrorType.OFFLINE
-              ? Icon.WifiDisabled
-              : Icon.ExclamationMark
-          }
-          title={
-            error.type === ErrorType.OFFLINE
-              ? "You Appear to Be Offline"
-              : "Search Failed"
-          }
+          icon={error.type === ErrorType.OFFLINE ? Icon.WifiDisabled : Icon.ExclamationMark}
+          title={error.type === ErrorType.OFFLINE ? "You Appear to Be Offline" : "Search Failed"}
           description={
-            error.type === ErrorType.OFFLINE
-              ? "Check your internet connection and try again."
-              : error.message
+            error.type === ErrorType.OFFLINE ? "Check your internet connection and try again." : error.message
           }
         />
       )}
@@ -208,11 +198,7 @@ export function SearchInvestmentsView({
           subtitle={`${results.length} result${results.length === 1 ? "" : "s"}${searchedQuery ? ` for "${searchedQuery}"` : ""}`}
         >
           {results.map((result) => (
-            <SearchResultItem
-              key={result.symbol}
-              result={result}
-              onSelect={handleSelectResult}
-            />
+            <SearchResultItem key={result.symbol} result={result} onSelect={handleSelectResult} />
           ))}
         </List.Section>
       )}
@@ -221,15 +207,9 @@ export function SearchInvestmentsView({
       {hasError && hasResults && (
         <List.Section title="⚠️ Search Error">
           <List.Item
-            icon={
-              error.type === ErrorType.OFFLINE
-                ? Icon.WifiDisabled
-                : Icon.ExclamationMark
-            }
+            icon={error.type === ErrorType.OFFLINE ? Icon.WifiDisabled : Icon.ExclamationMark}
             title={
-              error.type === ErrorType.OFFLINE
-                ? "Offline — showing previous results"
-                : "Error fetching latest results"
+              error.type === ErrorType.OFFLINE ? "Offline — showing previous results" : "Error fetching latest results"
             }
             subtitle={error.message}
           />

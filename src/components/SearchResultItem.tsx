@@ -120,11 +120,7 @@ export function SearchResultItem({ result, onSelect }: SearchResultItemProps): R
       actions={
         <ActionPanel>
           <ActionPanel.Section>
-            <Action
-              title="Select Investment"
-              icon={Icon.PlusCircle}
-              onAction={() => onSelect(result)}
-            />
+            <Action title="Select Investment" icon={Icon.PlusCircle} onAction={() => onSelect(result)} />
           </ActionPanel.Section>
           <ActionPanel.Section>
             <Action.CopyToClipboard

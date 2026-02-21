@@ -17,11 +17,11 @@
  */
 
 import { Cache } from "@raycast/api";
-import { CachedPrice, CachedFxRate, ErrorType } from "../utils/types";
+import { CachedPrice, CachedFxRate } from "../utils/types";
 import { CACHE_PREFIX, CACHE_CAPACITY_BYTES } from "../utils/constants";
 import { getTodayDateKey } from "../utils/formatting";
 import { getQuote, getFxRate } from "./yahoo-finance";
-import { createPortfolioError, classifyError } from "../utils/errors";
+import { createPortfolioError } from "../utils/errors";
 
 // ──────────────────────────────────────────
 // Cache Instance (shared across commands)
@@ -268,7 +268,7 @@ function findStaleFxRate(from: string, to: string): CachedFxRate | undefined {
  * @returns Object with prices map (symbol → CachedPrice) and any errors
  */
 export async function getCachedPrices(
-  symbols: string[]
+  symbols: string[],
 ): Promise<{ prices: Map<string, CachedPrice>; errors: Array<{ symbol: string; error: unknown }> }> {
   const prices = new Map<string, CachedPrice>();
   const errors: Array<{ symbol: string; error: unknown }> = [];
@@ -287,9 +287,7 @@ export async function getCachedPrices(
 
   // Fetch uncached symbols in parallel
   if (uncachedSymbols.length > 0) {
-    const results = await Promise.allSettled(
-      uncachedSymbols.map((s) => getCachedPrice(s))
-    );
+    const results = await Promise.allSettled(uncachedSymbols.map((s) => getCachedPrice(s)));
 
     results.forEach((result, index) => {
       const symbol = uncachedSymbols[index];
@@ -313,18 +311,13 @@ export async function getCachedPrices(
  * @param baseCurrency - The target currency for all conversions
  * @returns Map of "FROM" → CachedFxRate
  */
-export async function getCachedFxRates(
-  currencies: string[],
-  baseCurrency: string
-): Promise<Map<string, CachedFxRate>> {
+export async function getCachedFxRates(currencies: string[], baseCurrency: string): Promise<Map<string, CachedFxRate>> {
   const rates = new Map<string, CachedFxRate>();
 
   // Deduplicate currencies
   const uniqueCurrencies = [...new Set(currencies)];
 
-  const results = await Promise.allSettled(
-    uniqueCurrencies.map((currency) => getCachedFxRate(currency, baseCurrency))
-  );
+  const results = await Promise.allSettled(uniqueCurrencies.map((currency) => getCachedFxRate(currency, baseCurrency)));
 
   results.forEach((result, index) => {
     const currency = uniqueCurrencies[index];

@@ -61,7 +61,7 @@ export interface UsePortfolioReturn {
       units: number;
       currency: string;
       assetType: AssetType;
-    }
+    },
   ) => Promise<Position>;
 
   /** Updates the units of an existing position */
@@ -132,7 +132,7 @@ export function usePortfolio(): UsePortfolioReturn {
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -143,7 +143,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
       return newAccount;
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   const updateAccount = useCallback(
@@ -160,7 +160,7 @@ export function usePortfolio(): UsePortfolioReturn {
                     ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
                     ...(updates.type !== undefined ? { type: updates.type } : {}),
                   }
-                : account
+                : account,
             ),
             updatedAt: new Date().toISOString(),
           };
@@ -179,12 +179,12 @@ export function usePortfolio(): UsePortfolioReturn {
                       ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
                       ...(updates.type !== undefined ? { type: updates.type } : {}),
                     }
-                  : account
+                  : account,
               ),
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -192,7 +192,7 @@ export function usePortfolio(): UsePortfolioReturn {
         title: "Account Updated",
       });
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   const removeAccount = useCallback(
@@ -220,7 +220,7 @@ export function usePortfolio(): UsePortfolioReturn {
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -229,7 +229,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: accountName,
       });
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   // ── Position Mutations ─────────────────
@@ -243,7 +243,7 @@ export function usePortfolio(): UsePortfolioReturn {
         units: number;
         currency: string;
         assetType: AssetType;
-      }
+      },
     ): Promise<Position> => {
       const newPosition: Position = {
         id: generateId(),
@@ -261,9 +261,7 @@ export function usePortfolio(): UsePortfolioReturn {
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
-              account.id === accountId
-                ? { ...account, positions: [...account.positions, newPosition] }
-                : account
+              account.id === accountId ? { ...account, positions: [...account.positions, newPosition] } : account,
             ),
             updatedAt: new Date().toISOString(),
           };
@@ -276,14 +274,12 @@ export function usePortfolio(): UsePortfolioReturn {
             return {
               ...currentData,
               accounts: currentData.accounts.map((account) =>
-                account.id === accountId
-                  ? { ...account, positions: [...account.positions, newPosition] }
-                  : account
+                account.id === accountId ? { ...account, positions: [...account.positions, newPosition] } : account,
               ),
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -294,7 +290,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
       return newPosition;
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   const updatePosition = useCallback(
@@ -308,11 +304,9 @@ export function usePortfolio(): UsePortfolioReturn {
               account.id === accountId
                 ? {
                     ...account,
-                    positions: account.positions.map((pos) =>
-                      pos.id === positionId ? { ...pos, units } : pos
-                    ),
+                    positions: account.positions.map((pos) => (pos.id === positionId ? { ...pos, units } : pos)),
                   }
-                : account
+                : account,
             ),
             updatedAt: new Date().toISOString(),
           };
@@ -328,16 +322,14 @@ export function usePortfolio(): UsePortfolioReturn {
                 account.id === accountId
                   ? {
                       ...account,
-                      positions: account.positions.map((pos) =>
-                        pos.id === positionId ? { ...pos, units } : pos
-                      ),
+                      positions: account.positions.map((pos) => (pos.id === positionId ? { ...pos, units } : pos)),
                     }
-                  : account
+                  : account,
               ),
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -346,15 +338,13 @@ export function usePortfolio(): UsePortfolioReturn {
         message: `Units set to ${units}`,
       });
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   const removePosition = useCallback(
     async (accountId: string, positionId: string): Promise<void> => {
       // Find the position name for the toast message
-      const position = portfolio?.accounts
-        .find((a) => a.id === accountId)
-        ?.positions.find((p) => p.id === positionId);
+      const position = portfolio?.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
       const positionName = position?.name ?? "Position";
 
       await mutate(
@@ -368,7 +358,7 @@ export function usePortfolio(): UsePortfolioReturn {
                     ...account,
                     positions: account.positions.filter((p) => p.id !== positionId),
                   }
-                : account
+                : account,
             ),
             updatedAt: new Date().toISOString(),
           };
@@ -386,12 +376,12 @@ export function usePortfolio(): UsePortfolioReturn {
                       ...account,
                       positions: account.positions.filter((p) => p.id !== positionId),
                     }
-                  : account
+                  : account,
               ),
               updatedAt: new Date().toISOString(),
             };
           },
-        }
+        },
       );
 
       await showToast({
@@ -400,7 +390,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: positionName,
       });
     },
-    [portfolio, mutate]
+    [portfolio, mutate],
   );
 
   // ── Query Helpers ──────────────────────
@@ -436,7 +426,7 @@ export function usePortfolio(): UsePortfolioReturn {
     (accountId: string): Account | undefined => {
       return portfolio?.accounts.find((a) => a.id === accountId);
     },
-    [portfolio]
+    [portfolio],
   );
 
   // ── Return ─────────────────────────────

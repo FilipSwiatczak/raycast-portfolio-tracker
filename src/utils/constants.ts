@@ -15,6 +15,7 @@ import { AccountType, AssetType } from "./types";
 /** Human-readable labels for each AccountType */
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.ISA]: "ISA",
+  [AccountType.LISA]: "LISA",
   [AccountType.SIPP]: "SIPP / Pension",
   [AccountType.GIA]: "General Investment",
   [AccountType.BROKERAGE]: "Brokerage",
