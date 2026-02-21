@@ -42,6 +42,7 @@ import {
   PortfolioError,
   ExtensionPreferences,
   ErrorType,
+  AssetType,
 } from "../utils/types";
 import { getCachedPrices, getCachedFxRates } from "../services/price-cache";
 import { createPortfolioError } from "../utils/errors";
@@ -124,7 +125,11 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
 
     for (const account of portfolio.accounts) {
       for (const position of account.positions) {
-        symbolSet.add(position.symbol);
+        // CASH positions don't have a tradeable symbol — skip them from API fetches.
+        // Their price is always 1.0 per unit of their currency.
+        if (position.assetType !== AssetType.CASH) {
+          symbolSet.add(position.symbol);
+        }
         currencySet.add(position.currency);
       }
     }
@@ -194,11 +199,28 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
     // Positions without prices will show as zero value.
     const accountValuations: AccountValuation[] = portfolio.accounts.map((account) => {
       const positionValuations: PositionValuation[] = account.positions.map((position) => {
-        const priceData = prices.get(position.symbol);
         const fxData = fxRates.get(position.currency);
-
-        const currentPrice = priceData?.price ?? 0;
         const fxRate = fxData?.rate ?? 1.0;
+
+        // CASH positions: price is always 1.0, no daily change, value = units directly.
+        if (position.assetType === AssetType.CASH) {
+          const totalNativeValue = position.units; // 1 unit of cash = 1 currency unit
+          const totalBaseValue = totalNativeValue * fxRate;
+
+          return {
+            position,
+            currentPrice: 1.0,
+            totalNativeValue,
+            totalBaseValue,
+            change: 0,
+            changePercent: 0,
+            fxRate,
+          };
+        }
+
+        // Regular (traded) positions: use fetched price data.
+        const priceData = prices.get(position.symbol);
+        const currentPrice = priceData?.price ?? 0;
         const totalNativeValue = position.units * currentPrice;
         const totalBaseValue = totalNativeValue * fxRate;
         const change = priceData?.change ?? 0;

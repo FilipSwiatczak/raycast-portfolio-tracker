@@ -23,6 +23,7 @@ import { PortfolioList } from "./components/PortfolioList";
 import { AccountForm } from "./components/AccountForm";
 import { EditPositionForm } from "./components/EditPositionForm";
 import { AddUnitsForm } from "./components/AddUnitsForm";
+import { AddCashForm } from "./components/AddCashForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
 import { Account, Position, AccountType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
@@ -141,6 +142,21 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  function handleAddCash(accountId: string): void {
+    const account = portfolio?.accounts.find((a) => a.id === accountId);
+    const accountName = account?.name ?? "Account";
+
+    push(
+      <AddCashForm
+        accountId={accountId}
+        accountName={accountName}
+        onConfirm={async (params) => {
+          await addPosition(accountId, params);
+        }}
+      />,
+    );
+  }
+
   async function handleDeletePosition(accountId: string, positionId: string): Promise<void> {
     await removePosition(accountId, positionId);
   }
@@ -226,6 +242,7 @@ export default function PortfolioCommand(): React.JSX.Element {
       onEditAccount={handleEditAccount}
       onDeleteAccount={handleDeleteAccount}
       onAddPosition={handleAddPosition}
+      onAddCash={handleAddCash}
       onEditPosition={handleEditPosition}
       onAddUnits={handleAddUnits}
       onDeletePosition={handleDeletePosition}

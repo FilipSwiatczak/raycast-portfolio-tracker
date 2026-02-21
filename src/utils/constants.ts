@@ -21,6 +21,8 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.BROKERAGE]: "Brokerage",
   [AccountType._401K]: "401(k)",
   [AccountType.CRYPTO]: "Crypto",
+  [AccountType.CURRENT_ACCOUNT]: "Current Account",
+  [AccountType.SAVINGS_ACCOUNT]: "Savings Account",
   [AccountType.OTHER]: "Other",
 };
 
@@ -36,6 +38,8 @@ export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
   [AccountType.BROKERAGE]: Color.Magenta,
   [AccountType._401K]: Color.Yellow,
   [AccountType.CRYPTO]: Color.Red,
+  [AccountType.CURRENT_ACCOUNT]: Color.Yellow,
+  [AccountType.SAVINGS_ACCOUNT]: Color.Green,
   [AccountType.OTHER]: Color.SecondaryText,
 };
 
@@ -53,6 +57,7 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   [AssetType.CRYPTOCURRENCY]: "Cryptocurrency",
   [AssetType.OPTION]: "Option",
   [AssetType.FUTURE]: "Future",
+  [AssetType.CASH]: "Cash",
   [AssetType.UNKNOWN]: "Unknown",
 };
 
@@ -92,6 +97,30 @@ export const MINOR_CURRENCY_FACTORS: Record<string, { majorCode: string; divisor
   ILA: { majorCode: "ILS", divisor: 100 }, // Israeli Agorot
   ZAc: { majorCode: "ZAR", divisor: 100 }, // South African cents
 };
+
+// ──────────────────────────────────────────
+// Cash Position Configuration
+// ──────────────────────────────────────────
+
+/** Currency options for the "Add Cash" form dropdown */
+export const CASH_CURRENCY_OPTIONS = [
+  { value: "GBP", title: "GBP (£)" },
+  { value: "USD", title: "USD ($)" },
+  { value: "EUR", title: "EUR (€)" },
+  { value: "CHF", title: "CHF (Fr)" },
+  { value: "JPY", title: "JPY (¥)" },
+  { value: "CAD", title: "CAD (C$)" },
+  { value: "AUD", title: "AUD (A$)" },
+  { value: "SEK", title: "SEK (kr)" },
+  { value: "NOK", title: "NOK (kr)" },
+  { value: "DKK", title: "DKK (kr)" },
+  { value: "HKD", title: "HKD (HK$)" },
+  { value: "SGD", title: "SGD (S$)" },
+  { value: "CNY", title: "CNY (¥)" },
+  { value: "INR", title: "INR (₹)" },
+  { value: "BRL", title: "BRL (R$)" },
+  { value: "ZAR", title: "ZAR (R)" },
+];
 
 // ──────────────────────────────────────────
 // Cache Configuration

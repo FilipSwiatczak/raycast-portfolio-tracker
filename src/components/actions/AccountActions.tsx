@@ -42,6 +42,9 @@ interface AccountActionsProps {
   /** Callback to navigate to the search view for adding a position to this account */
   onAddPosition: () => void;
 
+  /** Callback to navigate to the "Add Cash" form for this account */
+  onAddCash: () => void;
+
   /** Callback to navigate to the edit form for this account */
   onEditAccount: () => void;
 
@@ -61,20 +64,23 @@ interface AccountActionsProps {
  *
  * Actions:
  * 1. Add Position — start the search flow to add a new holding
- * 2. Edit Account — modify name or type
- * 3. Delete Account — remove with confirmation (destructive)
+ * 2. Add Cash — add a cash balance to the account
+ * 3. Edit Account — modify name or type
+ * 4. Delete Account — remove with confirmation (destructive)
  *
  * The delete action shows a confirmation alert before proceeding,
  * warning the user that all positions within the account will be lost.
  *
  * Keyboard shortcuts:
  * - ⇧⌘N → Add Position to this account
+ * - ⇧⌘C → Add Cash to this account
  * - ⌘E → Edit Account
  * - ⌃X → Delete Account (with confirmation)
  */
 export function AccountActions({
   account,
   onAddPosition,
+  onAddCash,
   onEditAccount,
   onDeleteAccount,
 }: AccountActionsProps): React.JSX.Element {
@@ -116,6 +122,13 @@ export function AccountActions({
         icon={Icon.PlusSquare}
         shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
         onAction={onAddPosition}
+      />
+
+      <Action
+        title="Add Cash"
+        icon={Icon.BankNote}
+        shortcut={{ modifiers: ["ctrl", "cmd"], key: "c" }}
+        onAction={onAddCash}
       />
 
       <Action

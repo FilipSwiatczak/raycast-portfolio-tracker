@@ -44,10 +44,12 @@ export enum AccountType {
   _401K = "401K",
   BROKERAGE = "BROKERAGE",
   CRYPTO = "CRYPTO",
+  CURRENT_ACCOUNT = "CURRENT ACCOUNT",
+  SAVINGS_ACCOUNT = "SAVINGS ACCOUNT",
   OTHER = "OTHER",
 }
 
-/** Asset type as returned by Yahoo Finance */
+/** Asset type as returned by Yahoo Finance (plus CASH for cash holdings) */
 export enum AssetType {
   EQUITY = "EQUITY",
   ETF = "ETF",
@@ -57,6 +59,8 @@ export enum AssetType {
   CRYPTOCURRENCY = "CRYPTOCURRENCY",
   OPTION = "OPTION",
   FUTURE = "FUTURE",
+  /** Cash holding — not a traded instrument. Price is always 1.0 per unit of its currency. */
+  CASH = "CASH",
   UNKNOWN = "UNKNOWN",
 }
 

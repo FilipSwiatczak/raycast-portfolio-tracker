@@ -26,10 +26,10 @@
 import React from "react";
 import { Form, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
 import { useState } from "react";
-import { Position } from "../utils/types";
+import { Position, AssetType } from "../utils/types";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { validateUnits, parseUnits } from "../utils/validation";
-import { formatUnits } from "../utils/formatting";
+import { formatUnits, formatCurrency } from "../utils/formatting";
 
 // ──────────────────────────────────────────
 // Props
@@ -84,7 +84,15 @@ export function EditPositionForm({
   // ── Display Values ──
 
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
-  const currentUnitsDisplay = formatUnits(position.units);
+  const isCash = position.assetType === AssetType.CASH;
+  const currentUnitsDisplay = isCash ? formatCurrency(position.units, position.currency) : formatUnits(position.units);
+
+  // Context-aware labels
+  const fieldTitle = isCash ? "Cash Amount" : "Number of Units";
+  const fieldPlaceholder = isCash ? "e.g. 500, 1250.50, 10000" : "e.g. 50, 12.5, 0.25";
+  const helpText = isCash
+    ? `Current balance: ${currentUnitsDisplay}. Enter the new total cash balance.`
+    : `Current holding: ${currentUnitsDisplay} units. Enter the new total number of units you hold.`;
 
   // ── Validation ──
 
@@ -155,29 +163,26 @@ export function EditPositionForm({
     >
       {/* ── Read-Only Context ── */}
       <Form.Description title="Asset" text={position.name} />
-      <Form.Description title="Symbol" text={position.symbol} />
+      {!isCash && <Form.Description title="Symbol" text={position.symbol} />}
       <Form.Description title="Type" text={typeLabel} />
       <Form.Description title="Currency" text={position.currency} />
       <Form.Description title="Account" text={accountName} />
 
       <Form.Separator />
 
-      {/* ── Editable Units Field ── */}
+      {/* ── Editable Field ── */}
       <Form.TextField
         id="units"
-        title="Number of Units"
-        placeholder="e.g. 50, 12.5, 0.25"
-        defaultValue={currentUnitsDisplay}
+        title={fieldTitle}
+        placeholder={fieldPlaceholder}
+        defaultValue={isCash ? String(position.units) : currentUnitsDisplay}
         error={unitsError}
         onChange={handleUnitsChange}
         onBlur={handleUnitsBlur}
         autoFocus
       />
 
-      <Form.Description
-        title=""
-        text={`Current holding: ${currentUnitsDisplay} units. Enter the new total number of units you hold.`}
-      />
+      <Form.Description title="" text={helpText} />
     </Form>
   );
 }

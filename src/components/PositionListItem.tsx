@@ -22,6 +22,12 @@
  *        VUSA.L · £72.45 · +1.25%       |
  * ```
  *
+ * **Cash positions** are rendered with simplified display:
+ * - No price-per-unit (always 1.0, meaningless to show)
+ * - No daily change (always 0%)
+ * - Subtitle shows the cash amount directly
+ * - Detail panel omits price/change section
+ *
  * Keywords include the account name, symbol, asset type, and currency
  * so that filtering in the search bar matches accounts and asset attributes.
  *
@@ -80,6 +86,7 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.CRYPTOCURRENCY]: Icon.Crypto,
   [AssetType.OPTION]: Icon.Switch,
   [AssetType.FUTURE]: Icon.Calendar,
+  [AssetType.CASH]: Icon.BankNote,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 
@@ -100,18 +107,25 @@ export function PositionListItem({
 
   const icon = ASSET_TYPE_ICONS[position.assetType] ?? Icon.QuestionMarkCircle;
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
+  const isCash = position.assetType === AssetType.CASH;
 
   const isCrossCurrency = position.currency !== baseCurrency;
   const hasPrice = currentPrice > 0;
 
-  // Change colour
-  const changeColor = changePercent > 0 ? COLOR_POSITIVE : changePercent < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL;
+  // Change colour (always neutral for cash since change is 0)
+  const changeColor = isCash
+    ? COLOR_NEUTRAL
+    : changePercent > 0
+      ? COLOR_POSITIVE
+      : changePercent < 0
+        ? COLOR_NEGATIVE
+        : COLOR_NEUTRAL;
 
   // ── Keywords (for search bar filtering) ──
   // Include account name so filtering by account name shows its positions.
   // Include symbol, type, and currency for broad searchability.
 
-  const keywords = [position.symbol, accountName, typeLabel, position.currency, position.name];
+  const keywords = [position.symbol, accountName, typeLabel, position.currency, position.name, "cash"];
 
   // ── Mode-Specific Rendering ──
 
@@ -120,6 +134,7 @@ export function PositionListItem({
       position,
       icon,
       typeLabel,
+      isCash,
       hasPrice,
       currentPrice,
       totalNativeValue,
@@ -138,6 +153,7 @@ export function PositionListItem({
   return renderListMode({
     position,
     icon,
+    isCash,
     hasPrice,
     currentPrice,
     totalBaseValue,
@@ -156,6 +172,7 @@ export function PositionListItem({
 interface ListModeProps {
   position: PositionValuation["position"];
   icon: Icon;
+  isCash: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalBaseValue: number;
@@ -169,20 +186,26 @@ interface ListModeProps {
 /**
  * Renders the position as a full-width list item with accessories.
  *
- * Layout:
+ * **Securities layout:**
  * ```
  * [icon] Name                           £72.45   +1.25%   £3,622.50
  *        VUSA.L · 50 units
  * ```
  *
+ * **Cash layout:**
+ * ```
+ * [icon] Cash (GBP)                                       £500.00
+ *        GBP · £500.00
+ * ```
+ *
  * Accessories (left → right, rightmost = highest priority / preserved longest):
- * 1. Price in native currency
- * 2. Daily change percentage (coloured tag)
- * 3. Total value in base currency (most important, rightmost)
+ * For securities: price, daily change tag, total value
+ * For cash: total value only (price=1.0 and change=0% are meaningless)
  */
 function renderListMode({
   position,
   icon,
+  isCash,
   hasPrice,
   currentPrice,
   totalBaseValue,
@@ -192,11 +215,25 @@ function renderListMode({
   keywords,
   actions,
 }: ListModeProps): React.JSX.Element {
-  const subtitle = `${position.symbol} · ${formatUnits(position.units)} units`;
+  // ── Subtitle ──
+  // Cash: "GBP · £500.00" (currency + formatted amount)
+  // Securities: "VUSA.L · 50 units" (symbol + unit count)
+
+  const subtitle = isCash
+    ? `${position.currency} · ${formatCurrency(position.units, position.currency)}`
+    : `${position.symbol} · ${formatUnits(position.units)} units`;
+
+  // ── Accessories ──
 
   const accessories: List.Item.Accessory[] = [];
 
-  if (hasPrice) {
+  if (isCash) {
+    // Cash: just show total value in base currency (or native if same)
+    accessories.push({
+      text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: Color.PrimaryText },
+      tooltip: `Cash balance: ${formatCurrency(totalBaseValue, baseCurrency)}`,
+    });
+  } else if (hasPrice) {
     // Price in native currency
     accessories.push({
       text: { value: formatCurrency(currentPrice, position.currency), color: Color.SecondaryText },
@@ -245,6 +282,7 @@ interface DetailModeProps {
   position: PositionValuation["position"];
   icon: Icon;
   typeLabel: string;
+  isCash: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalNativeValue: number;
@@ -262,19 +300,27 @@ interface DetailModeProps {
 /**
  * Renders the position with a detail panel on the right.
  *
- * List row (left side):
+ * **Securities list row:**
  * ```
  * [icon] Name
  *        VUSA.L · £72.45 · +1.25% · £3,622 total
  * ```
  *
+ * **Cash list row:**
+ * ```
+ * [icon] Cash (GBP)
+ *        GBP · £500.00
+ * ```
+ *
  * Detail panel (right side):
- * Full metadata with groupings: Asset Info, Price & Change, Holdings, Metadata
+ * Securities: Asset Info, Price & Change, Holdings, Metadata
+ * Cash: Asset Info, Balance, FX (if cross-currency), Metadata
  */
 function renderDetailMode({
   position,
   icon,
   typeLabel,
+  isCash,
   hasPrice,
   currentPrice,
   totalNativeValue,
@@ -288,21 +334,156 @@ function renderDetailMode({
   keywords,
   actions,
 }: DetailModeProps): React.JSX.Element {
+  // ── Subtitle ──
   // When detail is showing, accessories are hidden by Raycast.
   // Pack key financial info into the subtitle instead.
-  const subtitleParts = [position.symbol];
 
-  if (hasPrice) {
-    subtitleParts.push(formatCurrency(currentPrice, position.currency));
-    subtitleParts.push(formatPercent(changePercent));
-    subtitleParts.push(`${formatCurrencyCompact(totalBaseValue, baseCurrency)} total`);
+  let subtitle: string;
+
+  if (isCash) {
+    subtitle = `${position.currency} · ${formatCurrency(position.units, position.currency)}`;
+  } else {
+    const subtitleParts = [position.symbol];
+    if (hasPrice) {
+      subtitleParts.push(formatCurrency(currentPrice, position.currency));
+      subtitleParts.push(formatPercent(changePercent));
+      subtitleParts.push(`${formatCurrencyCompact(totalBaseValue, baseCurrency)} total`);
+    }
+    subtitle = subtitleParts.join(" · ");
   }
-
-  const subtitle = subtitleParts.join(" · ");
 
   // ── Detail Panel ──
 
-  const detail = (
+  const detail = isCash
+    ? buildCashDetail({ position, typeLabel, totalNativeValue, totalBaseValue, fxRate, isCrossCurrency, baseCurrency })
+    : buildSecuritiesDetail({
+        position,
+        typeLabel,
+        hasPrice,
+        currentPrice,
+        totalNativeValue,
+        totalBaseValue,
+        change,
+        changePercent,
+        changeColor,
+        fxRate,
+        isCrossCurrency,
+        baseCurrency,
+      });
+
+  return (
+    <List.Item
+      id={position.id}
+      icon={icon}
+      title={position.name}
+      subtitle={subtitle}
+      keywords={keywords}
+      detail={detail}
+      actions={actions}
+    />
+  );
+}
+
+// ──────────────────────────────────────────
+// Detail Panel Builders
+// ──────────────────────────────────────────
+
+/**
+ * Builds the detail panel for a cash position.
+ *
+ * Shows: type tag, currency, balance, converted value (if cross-currency),
+ * FX rate (if cross-currency), and date added.
+ */
+function buildCashDetail({
+  position,
+  typeLabel,
+  totalNativeValue,
+  totalBaseValue,
+  fxRate,
+  isCrossCurrency,
+  baseCurrency,
+}: {
+  position: PositionValuation["position"];
+  typeLabel: string;
+  totalNativeValue: number;
+  totalBaseValue: number;
+  fxRate: number;
+  isCrossCurrency: boolean;
+  baseCurrency: string;
+}): React.JSX.Element {
+  return (
+    <List.Item.Detail
+      metadata={
+        <List.Item.Detail.Metadata>
+          {/* ── Cash Info ── */}
+          <List.Item.Detail.Metadata.Label title="Type" text={typeLabel} />
+          <List.Item.Detail.Metadata.Label title="Currency" text={position.currency} />
+
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Balance ── */}
+          <List.Item.Detail.Metadata.Label
+            title={`Balance (${position.currency})`}
+            text={formatCurrency(totalNativeValue, position.currency)}
+          />
+
+          {isCrossCurrency && (
+            <>
+              <List.Item.Detail.Metadata.Label
+                title={`Value (${baseCurrency})`}
+                text={formatCurrency(totalBaseValue, baseCurrency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="FX Rate"
+                text={`1 ${position.currency} = ${fxRate.toFixed(4)} ${baseCurrency}`}
+              />
+            </>
+          )}
+
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Metadata ── */}
+          <List.Item.Detail.Metadata.Label title="Added" text={formatDate(position.addedAt)} />
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+/**
+ * Builds the detail panel for a traded security (stock, ETF, fund, etc.).
+ *
+ * Shows: asset name, symbol, type tag, price, day change, units, native value,
+ * converted value (if cross-currency), FX rate, currency, and date added.
+ */
+function buildSecuritiesDetail({
+  position,
+  typeLabel,
+  hasPrice,
+  currentPrice,
+  totalNativeValue,
+  totalBaseValue,
+  change,
+  changePercent,
+  changeColor,
+  fxRate,
+  isCrossCurrency,
+  baseCurrency,
+}: {
+  position: PositionValuation["position"];
+  typeLabel: string;
+  hasPrice: boolean;
+  currentPrice: number;
+  totalNativeValue: number;
+  totalBaseValue: number;
+  change: number;
+  changePercent: number;
+  changeColor: Color;
+  fxRate: number;
+  isCrossCurrency: boolean;
+  baseCurrency: string;
+}): React.JSX.Element {
+  return (
     <List.Item.Detail
       metadata={
         <List.Item.Detail.Metadata>
@@ -371,18 +552,6 @@ function renderDetailMode({
           <List.Item.Detail.Metadata.Label title="Added" text={formatDate(position.addedAt)} />
         </List.Item.Detail.Metadata>
       }
-    />
-  );
-
-  return (
-    <List.Item
-      id={position.id}
-      icon={icon}
-      title={position.name}
-      subtitle={subtitle}
-      keywords={keywords}
-      detail={detail}
-      actions={actions}
     />
   );
 }

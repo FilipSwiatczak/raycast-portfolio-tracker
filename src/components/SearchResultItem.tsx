@@ -60,6 +60,7 @@ const ASSET_TYPE_COLORS: Record<AssetType, Color.ColorLike> = {
   [AssetType.CRYPTOCURRENCY]: Color.Magenta,
   [AssetType.OPTION]: Color.Red,
   [AssetType.FUTURE]: Color.Red,
+  [AssetType.CASH]: Color.Green,
   [AssetType.UNKNOWN]: Color.SecondaryText,
 };
 
@@ -75,6 +76,7 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.CRYPTOCURRENCY]: Icon.Crypto,
   [AssetType.OPTION]: Icon.Switch,
   [AssetType.FUTURE]: Icon.Calendar,
+  [AssetType.CASH]: Icon.BankNote,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 

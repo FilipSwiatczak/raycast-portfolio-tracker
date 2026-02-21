@@ -80,6 +80,9 @@ export interface PortfolioListProps {
   /** Navigate to the "Search Investments" / "Add Position" flow for an account */
   onAddPosition: (accountId: string) => void;
 
+  /** Navigate to the "Add Cash" form for an account */
+  onAddCash: (accountId: string) => void;
+
   /** Navigate to the "Edit Position" form for a specific position */
   onEditPosition: (account: Account, position: Position) => void;
 
@@ -115,6 +118,7 @@ export function PortfolioList({
   onEditAccount,
   onDeleteAccount,
   onAddPosition,
+  onAddCash,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -279,6 +283,7 @@ export function PortfolioList({
           onEditAccount={onEditAccount}
           onDeleteAccount={onDeleteAccount}
           onAddPosition={onAddPosition}
+          onAddCash={onAddCash}
           onEditPosition={onEditPosition}
           onAddUnits={onAddUnits}
           onDeletePosition={onDeletePosition}
@@ -299,6 +304,7 @@ export function PortfolioList({
             onEditAccount={onEditAccount}
             onDeleteAccount={onDeleteAccount}
             onAddPosition={onAddPosition}
+            onAddCash={onAddCash}
             onRefresh={onRefresh}
             onSearchInvestments={onSearchInvestments}
           />
@@ -322,6 +328,7 @@ interface AccountSectionProps {
   onEditAccount: (account: Account) => void;
   onDeleteAccount: (accountId: string) => Promise<void>;
   onAddPosition: (accountId: string) => void;
+  onAddCash: (accountId: string) => void;
   onEditPosition: (account: Account, position: Position) => void;
   onAddUnits: (account: Account, position: Position) => void;
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
@@ -340,6 +347,7 @@ function AccountSection({
   onEditAccount,
   onDeleteAccount,
   onAddPosition,
+  onAddCash,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -380,6 +388,7 @@ function AccountSection({
               <AccountActions
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
+                onAddCash={() => onAddCash(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -414,6 +423,7 @@ function AccountSection({
               <AccountActions
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
+                onAddCash={() => onAddCash(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -473,6 +483,7 @@ function AccountSection({
               <AccountActions
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
+                onAddCash={() => onAddCash(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -502,6 +513,7 @@ interface FallbackAccountSectionProps {
   onEditAccount: (account: Account) => void;
   onDeleteAccount: (accountId: string) => Promise<void>;
   onAddPosition: (accountId: string) => void;
+  onAddCash: (accountId: string) => void;
   onRefresh: () => void;
   onSearchInvestments?: () => void;
 }
@@ -514,6 +526,7 @@ function FallbackAccountSection({
   onEditAccount,
   onDeleteAccount,
   onAddPosition,
+  onAddCash,
   onRefresh,
   onSearchInvestments,
 }: FallbackAccountSectionProps): React.JSX.Element {
@@ -539,6 +552,7 @@ function FallbackAccountSection({
               <AccountActions
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
+                onAddCash={() => onAddCash(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -564,6 +578,7 @@ function FallbackAccountSection({
                 <AccountActions
                   account={account}
                   onAddPosition={() => onAddPosition(account.id)}
+                  onAddCash={() => onAddCash(account.id)}
                   onEditAccount={() => onEditAccount(account)}
                   onDeleteAccount={() => onDeleteAccount(account.id)}
                 />

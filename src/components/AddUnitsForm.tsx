@@ -33,10 +33,10 @@
 import React from "react";
 import { Form, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
 import { useState, useMemo } from "react";
-import { Position } from "../utils/types";
+import { Position, AssetType } from "../utils/types";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { validateUnits, parseUnits } from "../utils/validation";
-import { formatUnits } from "../utils/formatting";
+import { formatUnits, formatCurrency } from "../utils/formatting";
 
 // ──────────────────────────────────────────
 // Props
@@ -94,7 +94,15 @@ export function AddUnitsForm({
   // ── Display Values ──
 
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
-  const currentUnitsDisplay = formatUnits(position.units);
+  const isCash = position.assetType === AssetType.CASH;
+  const currentUnitsDisplay = isCash ? formatCurrency(position.units, position.currency) : formatUnits(position.units);
+
+  // Context-aware labels
+  const navTitle = isCash ? `Add Cash — ${position.name}` : `Add Units — ${position.name}`;
+  const submitTitle = isCash ? "Add Cash" : "Add Units";
+  const fieldTitle = isCash ? "Amount to Add" : "Units to Add";
+  const fieldPlaceholder = isCash ? "e.g. 500, 1250.50, 10000" : "e.g. 10, 5.5, 0.25";
+  const currentLabel = isCash ? "Current Balance" : "Current Units";
 
   // ── Computed New Total ──
 
@@ -106,7 +114,8 @@ export function AddUnitsForm({
     return position.units + parsed;
   }, [unitsToAdd, position.units]);
 
-  const newTotalDisplay = newTotal !== null ? formatUnits(newTotal) : "—";
+  const newTotalDisplay =
+    newTotal !== null ? (isCash ? formatCurrency(newTotal, position.currency) : formatUnits(newTotal)) : "—";
 
   // ── Validation ──
 
@@ -154,32 +163,32 @@ export function AddUnitsForm({
 
   return (
     <Form
-      navigationTitle={`Add Units — ${position.name}`}
+      navigationTitle={navTitle}
       isLoading={isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Add Units" icon={Icon.PlusCircle} onSubmit={handleSubmit} />
+          <Action.SubmitForm title={submitTitle} icon={Icon.PlusCircle} onSubmit={handleSubmit} />
           <Action title="Cancel" icon={Icon.XMarkCircle} onAction={pop} shortcut={{ modifiers: ["cmd"], key: "." }} />
         </ActionPanel>
       }
     >
       {/* ── Read-Only Context ── */}
       <Form.Description title="Asset" text={position.name} />
-      <Form.Description title="Symbol" text={position.symbol} />
+      {!isCash && <Form.Description title="Symbol" text={position.symbol} />}
       <Form.Description title="Type" text={typeLabel} />
       <Form.Description title="Currency" text={position.currency} />
       <Form.Description title="Account" text={accountName} />
 
       <Form.Separator />
 
-      {/* ── Current Units (read-only) ── */}
-      <Form.Description title="Current Units" text={currentUnitsDisplay} />
+      {/* ── Current Value (read-only) ── */}
+      <Form.Description title={currentLabel} text={currentUnitsDisplay} />
 
-      {/* ── Units to Add ── */}
+      {/* ── Amount to Add ── */}
       <Form.TextField
         id="unitsToAdd"
-        title="Units to Add"
-        placeholder="e.g. 10, 5.5, 0.25"
+        title={fieldTitle}
+        placeholder={fieldPlaceholder}
         error={unitsError}
         onChange={handleUnitsChange}
         onBlur={handleUnitsBlur}
@@ -191,8 +200,12 @@ export function AddUnitsForm({
         title="New Total"
         text={
           newTotal !== null
-            ? `${currentUnitsDisplay} + ${unitsToAdd.trim()} = ${newTotalDisplay} units`
-            : `Enter the number of units you purchased. They will be added to your current ${currentUnitsDisplay} units.`
+            ? isCash
+              ? `${currentUnitsDisplay} + ${formatCurrency(Number(unitsToAdd.trim()), position.currency)} = ${newTotalDisplay}`
+              : `${currentUnitsDisplay} + ${unitsToAdd.trim()} = ${newTotalDisplay} units`
+            : isCash
+              ? `Enter the amount to add to your current ${currentUnitsDisplay} balance.`
+              : `Enter the number of units you purchased. They will be added to your current ${currentUnitsDisplay} units.`
         }
       />
     </Form>
