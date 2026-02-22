@@ -35,7 +35,17 @@
 
 import React from "react";
 import { useMemo } from "react";
-import { Detail, ActionPanel, Action, Alert, Icon, Color, useNavigation, confirmAlert } from "@raycast/api";
+import {
+  Detail,
+  ActionPanel,
+  Action,
+  Alert,
+  Icon,
+  Color,
+  useNavigation,
+  confirmAlert,
+  environment,
+} from "@raycast/api";
 import { Portfolio, PortfolioValuation } from "../utils/types";
 import { FireSettings, FireContribution, FireProjection } from "../utils/fire-types";
 import { calculateProjection, totalAnnualContribution } from "../services/fire-calculator";
@@ -155,9 +165,11 @@ export function FireDashboard({
 
   // ── Build markdown ──
 
+  const theme = environment.appearance === "light" ? "light" : "dark";
+
   const markdown = useMemo(() => {
-    return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions);
-  }, [projection, settings, baseCurrency, resolvedContributions]);
+    return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions, theme);
+  }, [projection, settings, baseCurrency, resolvedContributions, theme]);
 
   // ── Navigation Handlers ──
 

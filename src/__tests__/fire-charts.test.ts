@@ -11,8 +11,17 @@
  * so no mocks are needed.
  */
 
-import { buildBar, formatCompactValue, buildProjectionChart, buildDashboardMarkdown } from "../utils/fire-charts";
-import { FireProjection, FireProjectionYear, FireSettings } from "../utils/fire-types";
+import {
+  buildBar,
+  formatCompactValue,
+  buildProjectionChart,
+  buildProgressBar,
+  buildContributionsSummary,
+  buildDashboardMarkdown,
+  computeChartBars,
+} from "../utils/fire-charts";
+import { buildProjectionSVG, ChartBar, ChartConfig } from "../utils/fire-svg";
+import { FireContribution, FireProjection, FireProjectionYear, FireSettings } from "../utils/fire-types";
 
 // ──────────────────────────────────────────
 // buildBar
@@ -291,6 +300,616 @@ describe("buildProjectionChart", () => {
 });
 
 // ──────────────────────────────────────────
+// computeChartBars
+// ──────────────────────────────────────────
+
+describe("computeChartBars", () => {
+  function makeProjection(opts: {
+    numYears?: number;
+    currentValue?: number;
+    annualContribution?: number;
+    realGrowthRate?: number;
+    targetValue?: number;
+  }): FireProjection {
+    const {
+      numYears = 5,
+      currentValue = 200_000,
+      annualContribution = 24_000,
+      realGrowthRate = 0.045,
+      targetValue = 1_000_000,
+    } = opts;
+
+    const years: FireProjectionYear[] = [];
+    let value = currentValue;
+    for (let i = 0; i < numYears; i++) {
+      if (i > 0) {
+        value = value * (1 + realGrowthRate) + annualContribution * (1 + realGrowthRate / 2);
+      }
+      years.push({
+        year: 2025 + i,
+        age: 35 + i,
+        portfolioValue: value,
+        isTargetHit: value >= targetValue,
+        isSippAccessible: false,
+      });
+    }
+
+    return {
+      years,
+      fireYear: null,
+      fireAge: null,
+      daysToFire: null,
+      workingDaysToFire: null,
+      currentPortfolioValue: currentValue,
+      annualContribution,
+      realGrowthRate,
+      targetValue,
+      targetHitInWindow: false,
+    };
+  }
+
+  it("returns empty array for empty projection", () => {
+    const projection: FireProjection = {
+      years: [],
+      fireYear: null,
+      fireAge: null,
+      daysToFire: null,
+      workingDaysToFire: null,
+      currentPortfolioValue: 0,
+      annualContribution: 0,
+      realGrowthRate: 0,
+      targetValue: 1_000_000,
+      targetHitInWindow: false,
+    };
+    expect(computeChartBars(projection, "GBP")).toEqual([]);
+  });
+
+  it("returns one bar per projection year", () => {
+    const projection = makeProjection({ numYears: 8 });
+    const bars = computeChartBars(projection, "GBP");
+    expect(bars).toHaveLength(8);
+  });
+
+  it("first year base growth equals current portfolio value", () => {
+    const projection = makeProjection({ currentValue: 300_000 });
+    const bars = computeChartBars(projection, "GBP");
+    expect(bars[0].baseGrowthValue).toBe(300_000);
+  });
+
+  it("first year contribution value is zero", () => {
+    const projection = makeProjection({ currentValue: 300_000 });
+    const bars = computeChartBars(projection, "GBP");
+    expect(bars[0].contributionValue).toBe(0);
+  });
+
+  it("base growth + contribution equals total value for each year", () => {
+    const projection = makeProjection({ numYears: 10 });
+    const bars = computeChartBars(projection, "GBP");
+    for (const bar of bars) {
+      expect(bar.baseGrowthValue + bar.contributionValue).toBeCloseTo(bar.totalValue, 2);
+    }
+  });
+
+  it("contribution value grows over time when contributions exist", () => {
+    const projection = makeProjection({ annualContribution: 24_000, numYears: 5 });
+    const bars = computeChartBars(projection, "GBP");
+    // Year 0 has no contributions, years 1+ should have increasing contribution value
+    expect(bars[0].contributionValue).toBe(0);
+    for (let i = 2; i < bars.length; i++) {
+      expect(bars[i].contributionValue).toBeGreaterThan(bars[i - 1].contributionValue);
+    }
+  });
+
+  it("contribution value is zero when there are no contributions", () => {
+    const projection = makeProjection({ annualContribution: 0, numYears: 5 });
+    const bars = computeChartBars(projection, "GBP");
+    for (const bar of bars) {
+      expect(bar.contributionValue).toBe(0);
+    }
+  });
+
+  it("base growth compounds correctly without contributions", () => {
+    const rate = 0.05;
+    const initial = 100_000;
+    const projection = makeProjection({
+      currentValue: initial,
+      annualContribution: 12_000,
+      realGrowthRate: rate,
+      numYears: 3,
+    });
+    const bars = computeChartBars(projection, "GBP");
+    expect(bars[0].baseGrowthValue).toBeCloseTo(initial, 2);
+    expect(bars[1].baseGrowthValue).toBeCloseTo(initial * (1 + rate), 2);
+    expect(bars[2].baseGrowthValue).toBeCloseTo(initial * (1 + rate) ** 2, 2);
+  });
+
+  it("includes pre-formatted labels", () => {
+    const projection = makeProjection({ currentValue: 500_000 });
+    const bars = computeChartBars(projection, "GBP");
+    expect(bars[0].label).toBe("£500K");
+  });
+
+  it("marks only the first target-hit year as isFireYear", () => {
+    const projection = makeProjection({
+      currentValue: 900_000,
+      annualContribution: 200_000,
+      targetValue: 1_000_000,
+      numYears: 5,
+    });
+    const bars = computeChartBars(projection, "GBP");
+    const fireYears = bars.filter((b) => b.isFireYear);
+    expect(fireYears).toHaveLength(1);
+  });
+});
+
+// ──────────────────────────────────────────
+// buildProjectionSVG
+// ──────────────────────────────────────────
+
+describe("buildProjectionSVG", () => {
+  const sampleBars: ChartBar[] = [
+    {
+      year: 2025,
+      label: "£200K",
+      totalValue: 200_000,
+      baseGrowthValue: 200_000,
+      contributionValue: 0,
+      isFireYear: false,
+    },
+    {
+      year: 2026,
+      label: "£250K",
+      totalValue: 250_000,
+      baseGrowthValue: 210_000,
+      contributionValue: 40_000,
+      isFireYear: false,
+    },
+    {
+      year: 2027,
+      label: "£310K",
+      totalValue: 310_000,
+      baseGrowthValue: 220_000,
+      contributionValue: 90_000,
+      isFireYear: false,
+    },
+    {
+      year: 2028,
+      label: "£400K",
+      totalValue: 400_000,
+      baseGrowthValue: 230_000,
+      contributionValue: 170_000,
+      isFireYear: true,
+    },
+  ];
+
+  const defaultConfig: ChartConfig = {
+    targetValue: 400_000,
+    targetLabel: "£400K",
+    theme: "dark",
+  };
+
+  it("returns empty string for empty bars", () => {
+    expect(buildProjectionSVG([], defaultConfig)).toBe("");
+  });
+
+  it("returns a valid SVG document", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toMatch(/^<svg\s/);
+    expect(svg).toContain("</svg>");
+    expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+  });
+
+  // ── CSS media-query theming ──
+
+  it("embeds a <defs><style> block with prefers-color-scheme media queries", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain("<defs>");
+    expect(svg).toContain("<style>");
+    expect(svg).toContain("@media (prefers-color-scheme: light)");
+    expect(svg).toContain("@media (prefers-color-scheme: dark)");
+    expect(svg).toContain("</style>");
+    expect(svg).toContain("</defs>");
+  });
+
+  it("includes both dark AND light palette colours in CSS regardless of theme param", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig); // theme: "dark"
+    // Dark palette colours in CSS (hex + fill-opacity, no rgba)
+    expect(svg).toContain(".c-bg { fill: #1C1C1E; }");
+    expect(svg).toContain(".c-base { fill: #FFFFFF; fill-opacity: 0.75; }");
+    expect(svg).toContain(".c-contrib { fill: #4A9EFF; }");
+    expect(svg).toContain(".c-target { stroke: #FF9F0A; }");
+    // Light palette colours also in CSS
+    expect(svg).toContain(".c-bg { fill: #FFFFFF; }");
+    expect(svg).toContain(".c-base { fill: #000000; fill-opacity: 0.55; }");
+    expect(svg).toContain(".c-contrib { fill: #007AFF; }");
+    expect(svg).toContain(".c-target { stroke: #FF9500; }");
+  });
+
+  it("applies CSS class attributes to themed elements", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain('class="c-bg"');
+    expect(svg).toContain('class="c-track"');
+    expect(svg).toContain('class="c-base"');
+    expect(svg).toContain('class="c-contrib"');
+    expect(svg).toContain('class="c-target"');
+    expect(svg).toContain('class="c-text"');
+    expect(svg).toContain('class="c-muted"');
+    expect(svg).toContain('class="c-legend"');
+  });
+
+  // ── Inline fallback attributes ──
+
+  it("includes inline fill fallback on background rect for dark theme", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // Inline presentation attribute as fallback when CSS media queries unsupported
+    expect(svg).toContain('class="c-bg"');
+    expect(svg).toContain('fill="#1C1C1E"');
+  });
+
+  it("includes inline fill fallback on background rect for light theme", () => {
+    const lightConfig: ChartConfig = { ...defaultConfig, theme: "light" };
+    const svg = buildProjectionSVG(sampleBars, lightConfig);
+    // Inline presentation attribute uses the theme param for fallback
+    expect(svg).toMatch(/class="c-bg"[^>]*fill="#FFFFFF"/);
+  });
+
+  it("contains a rect for each bar track with class and inline fallback", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // Each bar has a track rect with class, hex fill, and fill-opacity (no rgba)
+    const trackMatches = svg.match(/class="c-track"[^>]*fill="#FFFFFF"[^>]*fill-opacity="0\.06"/g);
+    expect(trackMatches).not.toBeNull();
+    expect(trackMatches!.length).toBe(sampleBars.length);
+  });
+
+  it("contains base growth rect elements with class and inline fallback", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // Base growth rects have class for CSS override and hex fill + fill-opacity as fallback
+    expect(svg).toMatch(/class="c-base"[^>]*fill="#FFFFFF"[^>]*fill-opacity="0\.75"/);
+  });
+
+  it("contains contribution rect elements with class and inline fallback", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // Contribution rects have class for CSS override and inline fill as fallback
+    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#4A9EFF"/);
+  });
+
+  it("contains year labels", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain(">2025</text>");
+    expect(svg).toContain(">2026</text>");
+    expect(svg).toContain(">2027</text>");
+    expect(svg).toContain(">2028</text>");
+  });
+
+  it("contains value labels", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain("£200K");
+    expect(svg).toContain("£310K");
+  });
+
+  it("contains the target dashed line with class and inline fallback", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toMatch(/class="c-target"[^>]*stroke="#FF9F0A"/);
+    expect(svg).toContain("stroke-dasharray");
+  });
+
+  it("highlights the FIRE year row with class and inline fallback", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // FIRE highlight rect has class for CSS and hex fill + fill-opacity as fallback
+    expect(svg).toMatch(/class="c-fire-hl"[^>]*fill="#34C759"[^>]*fill-opacity="0\.12"/);
+  });
+
+  it("applies fire accent class to FIRE year labels", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // The FIRE year (2028) label should have the fire accent class
+    expect(svg).toMatch(/class="c-fire"[^>]*>2028<\/text>/);
+  });
+
+  it("adds FIRE marker emoji on the FIRE year value label", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain("🎯");
+  });
+
+  it("contains a legend with Portfolio Growth and Contributions labels", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain("Portfolio Growth");
+    expect(svg).toContain("Contributions");
+    expect(svg).toContain("Target");
+  });
+
+  it("includes the target label in the legend", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).toContain("£400K Target");
+  });
+
+  it("uses light theme palette for inline fallback attributes when theme is light", () => {
+    const lightConfig: ChartConfig = { ...defaultConfig, theme: "light" };
+    const svg = buildProjectionSVG(sampleBars, lightConfig);
+    // Inline fallback attributes use light palette colours (hex + fill-opacity, no rgba)
+    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#007AFF"/); // light blue contributions
+    expect(svg).toMatch(/class="c-base"[^>]*fill="#000000"[^>]*fill-opacity="0\.55"/); // dark base growth
+    expect(svg).toMatch(/class="c-target"[^>]*stroke="#FF9500"/); // light orange target
+  });
+
+  it("still contains both CSS palettes even when theme is light", () => {
+    const lightConfig: ChartConfig = { ...defaultConfig, theme: "light" };
+    const svg = buildProjectionSVG(sampleBars, lightConfig);
+    // CSS block always contains both palettes for auto-detection
+    expect(svg).toContain("@media (prefers-color-scheme: dark)");
+    expect(svg).toContain(".c-bg { fill: #1C1C1E; }");
+    expect(svg).toContain(".c-text { fill: #FFFFFF; fill-opacity: 0.82; }");
+    expect(svg).toContain("@media (prefers-color-scheme: light)");
+    expect(svg).toContain(".c-bg { fill: #FFFFFF; }");
+    expect(svg).toContain(".c-text { fill: #000000; fill-opacity: 0.82; }");
+  });
+
+  it("never emits rgba() in SVG output (SVG 1.1 compat)", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    expect(svg).not.toMatch(/fill="rgba\(/);
+    expect(svg).not.toMatch(/stroke="rgba\(/);
+  });
+
+  it("returns empty string when maxValue is zero", () => {
+    const zeroBars: ChartBar[] = [
+      { year: 2025, label: "£0", totalValue: 0, baseGrowthValue: 0, contributionValue: 0, isFireYear: false },
+    ];
+    const zeroConfig: ChartConfig = { ...defaultConfig, targetValue: 0 };
+    expect(buildProjectionSVG(zeroBars, zeroConfig)).toBe("");
+  });
+
+  it("height scales with number of bars", () => {
+    const shortBars = sampleBars.slice(0, 2);
+    const svgShort = buildProjectionSVG(shortBars, defaultConfig);
+    const svgFull = buildProjectionSVG(sampleBars, defaultConfig);
+    // Extract height from viewBox
+    const heightShort = Number(svgShort.match(/viewBox="0 0 \d+ (\d+)"/)?.[1] ?? 0);
+    const heightFull = Number(svgFull.match(/viewBox="0 0 \d+ (\d+)"/)?.[1] ?? 0);
+    expect(heightFull).toBeGreaterThan(heightShort);
+  });
+
+  it("does not render contribution rects when all contribution values are zero", () => {
+    const noContribBars: ChartBar[] = [
+      {
+        year: 2025,
+        label: "£200K",
+        totalValue: 200_000,
+        baseGrowthValue: 200_000,
+        contributionValue: 0,
+        isFireYear: false,
+      },
+      {
+        year: 2026,
+        label: "£210K",
+        totalValue: 210_000,
+        baseGrowthValue: 210_000,
+        contributionValue: 0,
+        isFireYear: false,
+      },
+    ];
+    const svg = buildProjectionSVG(noContribBars, defaultConfig);
+    // The legend always contains a small swatch with the contribution colour,
+    // but no actual bar rects should use it. Legend swatches are 10×10;
+    // bar rects use height="18". Count only bar-sized contribution rects.
+    const contribBarRects = svg.match(/class="c-contrib"[^>]*height="18"/g);
+    expect(contribBarRects).toBeNull();
+  });
+
+  it("legend elements carry theme CSS classes", () => {
+    const svg = buildProjectionSVG(sampleBars, defaultConfig);
+    // Legend swatches and text should have CSS classes for theme adaptation
+    // Portfolio Growth swatch uses c-base class
+    expect(svg).toMatch(/class="c-base"[^>]*width="10"[^>]*height="10"/);
+    // Contributions swatch uses c-contrib class
+    expect(svg).toMatch(/class="c-contrib"[^>]*width="10"[^>]*height="10"/);
+    // Legend text uses c-legend class
+    expect(svg).toMatch(/class="c-legend"[^>]*>Portfolio Growth<\/text>/);
+    expect(svg).toMatch(/class="c-legend"[^>]*>Contributions<\/text>/);
+    // Target legend line uses c-target class
+    expect(svg).toMatch(/class="c-target"[^>]*stroke-dasharray="3,2"/);
+  });
+});
+
+// ──────────────────────────────────────────
+// buildProgressBar
+// ──────────────────────────────────────────
+
+describe("buildProgressBar", () => {
+  it("returns empty string when target is zero", () => {
+    expect(buildProgressBar(100_000, 0, "GBP")).toBe("");
+  });
+
+  it("returns empty string when target is negative", () => {
+    expect(buildProgressBar(100_000, -500, "GBP")).toBe("");
+  });
+
+  it("wraps the bar in a code block", () => {
+    const result = buildProgressBar(200_000, 1_000_000, "GBP");
+    const lines = result.split("\n");
+    expect(lines[0]).toBe("```");
+    expect(lines[lines.length - 1]).toBe("```");
+  });
+
+  it("shows the correct percentage", () => {
+    const result = buildProgressBar(500_000, 1_000_000, "GBP");
+    expect(result).toContain("50%");
+  });
+
+  it("caps percentage at 100% when current exceeds target", () => {
+    const result = buildProgressBar(1_500_000, 1_000_000, "GBP");
+    expect(result).toContain("100%");
+    expect(result).not.toContain("150%");
+  });
+
+  it("shows 0% when current value is zero", () => {
+    const result = buildProgressBar(0, 1_000_000, "GBP");
+    expect(result).toContain("0%");
+  });
+
+  it("includes current and target value labels with arrow", () => {
+    const result = buildProgressBar(200_000, 1_000_000, "GBP");
+    expect(result).toContain("£200K");
+    expect(result).toContain("£1.0M");
+    expect(result).toContain("→");
+  });
+
+  it("contains filled and empty bar characters", () => {
+    const result = buildProgressBar(200_000, 1_000_000, "GBP");
+    expect(result).toContain("█");
+    expect(result).toContain("░");
+  });
+
+  it("shows fully filled bar at 100%", () => {
+    const result = buildProgressBar(1_000_000, 1_000_000, "GBP");
+    expect(result).not.toContain("░");
+    expect(result).toContain("█");
+  });
+
+  it("shows fully empty bar at 0%", () => {
+    const result = buildProgressBar(0, 1_000_000, "GBP");
+    expect(result).not.toContain("█");
+    expect(result).toContain("░");
+  });
+
+  it("uses the correct currency symbol", () => {
+    const resultUSD = buildProgressBar(200_000, 1_000_000, "USD");
+    expect(resultUSD).toContain("$200K");
+    expect(resultUSD).toContain("$1.0M");
+  });
+
+  it("bar has consistent total width of 32 characters", () => {
+    const result = buildProgressBar(300_000, 1_000_000, "GBP");
+    const barLine = result.split("\n")[1]; // middle line inside code block
+    const filledCount = (barLine.match(/█/g) || []).length;
+    const emptyCount = (barLine.match(/░/g) || []).length;
+    expect(filledCount + emptyCount).toBe(32);
+  });
+});
+
+// ──────────────────────────────────────────
+// buildContributionsSummary
+// ──────────────────────────────────────────
+
+describe("buildContributionsSummary", () => {
+  type ResolvedContribution = FireContribution & { displayName: string; accountName: string };
+
+  it("shows hint message when no contributions exist", () => {
+    const result = buildContributionsSummary([], "GBP");
+    expect(result).toContain("No monthly contributions configured");
+    expect(result).toContain("⌘⇧C");
+  });
+
+  it("shows single contribution as a compact one-liner", () => {
+    const contributions: ResolvedContribution[] = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 500,
+        displayName: "Vanguard S&P 500",
+        accountName: "ISA",
+      },
+    ];
+    const result = buildContributionsSummary(contributions, "GBP");
+    expect(result).toContain("💰");
+    expect(result).toContain("£500/mo");
+    expect(result).toContain("Vanguard S&P 500");
+    expect(result).toContain("ISA");
+    expect(result).toContain("£6K/yr");
+    // Single contribution should NOT have bullet points
+    expect(result).not.toContain("- £");
+  });
+
+  it("shows multiple contributions as header + bullet list", () => {
+    const contributions: ResolvedContribution[] = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 500,
+        displayName: "Vanguard S&P 500",
+        accountName: "Vanguard ISA",
+      },
+      {
+        id: "c2",
+        positionId: "p2",
+        accountId: "a1",
+        monthlyAmount: 300,
+        displayName: "Apple Inc.",
+        accountName: "Vanguard ISA",
+      },
+    ];
+    const result = buildContributionsSummary(contributions, "GBP");
+    // Header line with total
+    expect(result).toContain("💰");
+    expect(result).toContain("Contributions:");
+    expect(result).toContain("£800/mo");
+    expect(result).toContain("£10K/yr");
+    // Individual items as bullet points
+    expect(result).toContain("- £500/mo → Vanguard S&P 500");
+    expect(result).toContain("- £300/mo → Apple Inc.");
+    expect(result).toContain("Vanguard ISA");
+  });
+
+  it("uses the correct currency symbol", () => {
+    const contributions: ResolvedContribution[] = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 1000,
+        displayName: "VOO",
+        accountName: "Brokerage",
+      },
+    ];
+    const resultUSD = buildContributionsSummary(contributions, "USD");
+    expect(resultUSD).toContain("$1K/mo");
+
+    const resultGBP = buildContributionsSummary(contributions, "GBP");
+    expect(resultGBP).toContain("£1K/mo");
+  });
+
+  it("renders account name in italics", () => {
+    const contributions: ResolvedContribution[] = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 200,
+        displayName: "VWRL",
+        accountName: "My ISA",
+      },
+    ];
+    const result = buildContributionsSummary(contributions, "GBP");
+    expect(result).toContain("*My ISA*");
+  });
+
+  it("does not render a table", () => {
+    const contributions: ResolvedContribution[] = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 500,
+        displayName: "VWRL",
+        accountName: "ISA",
+      },
+      {
+        id: "c2",
+        positionId: "p2",
+        accountId: "a2",
+        monthlyAmount: 300,
+        displayName: "VUSA",
+        accountName: "SIPP",
+      },
+    ];
+    const result = buildContributionsSummary(contributions, "GBP");
+    // No markdown table syntax
+    expect(result).not.toContain("| ");
+    expect(result).not.toContain("|--");
+  });
+});
+
+// ──────────────────────────────────────────
 // buildDashboardMarkdown
 // ──────────────────────────────────────────
 
@@ -357,22 +976,51 @@ describe("buildDashboardMarkdown", () => {
     expect(md).toContain("Target not reached");
   });
 
+  it("includes the progress bar", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    // Progress bar shows current → target with percentage
+    expect(md).toContain("£200K");
+    expect(md).toContain("→");
+    expect(md).toContain("£1.0M");
+    expect(md).toContain("20%");
+  });
+
   it("includes the Portfolio Projection section", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("## Portfolio Projection");
   });
 
-  it("includes assumptions line with growth, inflation, and withdrawal rate", () => {
+  it("embeds the SVG chart as a base64 data URI image", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(md).toContain("![FIRE Projection](data:image/svg+xml;base64,");
+  });
+
+  it("SVG contains stacked bar data (base growth + contributions)", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    // Decode the base64 SVG and check it contains expected elements
+    const b64Match = md.match(/base64,([A-Za-z0-9+/=]+)\)/);
+    expect(b64Match).not.toBeNull();
+    const svg = Buffer.from(b64Match![1], "base64").toString("utf-8");
+    expect(svg).toContain("<svg");
+    expect(svg).toContain("Portfolio Growth");
+    expect(svg).toContain("Contributions");
+  });
+
+  it("includes assumptions line with emoji, growth, inflation, and withdrawal rate", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(md).toContain("📈");
     expect(md).toContain("Growth 7%");
     expect(md).toContain("Inflation 2.5%");
     expect(md).toContain("4.5% real return");
     expect(md).toContain("Withdrawal rate 4%");
   });
 
-  it("shows contributions table when contributions exist", () => {
+  it("shows contributions summary when contributions exist", () => {
     const contributions = [
       {
         id: "c1",
@@ -393,25 +1041,25 @@ describe("buildDashboardMarkdown", () => {
     ];
 
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions);
-    expect(md).toContain("## Monthly Contributions");
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    // Compact emoji list, not a table
+    expect(md).toContain("💰");
     expect(md).toContain("Vanguard S&P 500");
     expect(md).toContain("Apple Inc.");
     expect(md).toContain("Vanguard ISA");
-    expect(md).toContain("| Position |");
-    expect(md).toContain("| Account |");
-    // Should show total row since there are multiple contributions
-    expect(md).toContain("**Total**");
+    // No table syntax
+    expect(md).not.toContain("| Position |");
+    expect(md).not.toContain("| Account |");
   });
 
-  it("shows prompt message when no contributions exist", () => {
+  it("shows hint when no contributions exist", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("No monthly contributions configured");
-    expect(md).toContain("Manage Contributions");
+    expect(md).toContain("⌘⇧C");
   });
 
-  it("does not show Total row for single contribution", () => {
+  it("shows single contribution as one-liner without bullet list", () => {
     const contributions = [
       {
         id: "c1",
@@ -424,26 +1072,30 @@ describe("buildDashboardMarkdown", () => {
     ];
 
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions);
-    expect(md).not.toContain("**Total**");
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    expect(md).toContain("💰");
+    expect(md).toContain("VUSA.L");
+    expect(md).toContain("ISA");
+    // Single item — no bullet points, no "Contributions:" header
+    expect(md).not.toContain("- £");
+    expect(md).not.toContain("Contributions:");
   });
 
   it("uses the correct currency symbol", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const mdGBP = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const mdGBP = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(mdGBP).toContain("£");
 
-    const mdUSD = buildDashboardMarkdown(projection, testSettings, "USD", []);
+    const mdUSD = buildDashboardMarkdown(projection, testSettings, "USD", [], "dark");
     expect(mdUSD).toContain("$");
   });
 
-  it("contains the projection chart code block", () => {
+  it("contains the projection chart as an SVG image", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
-    // Chart is rendered inside a code block
-    expect(md).toContain("```");
-    expect(md).toContain("2025");
-    expect(md).toContain("█");
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    // Chart is rendered as a base64-encoded SVG image, not an ASCII code block
+    expect(md).toContain("data:image/svg+xml;base64,");
+    expect(md).toContain("![FIRE Projection]");
   });
 
   it("handles different growth/inflation combinations in assumptions", () => {
@@ -454,10 +1106,47 @@ describe("buildDashboardMarkdown", () => {
       withdrawalRate: 3.5,
     };
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, customSettings, "GBP", []);
+    const md = buildDashboardMarkdown(projection, customSettings, "GBP", [], "dark");
     expect(md).toContain("Growth 10%");
     expect(md).toContain("Inflation 3%");
     expect(md).toContain("7.0% real return");
     expect(md).toContain("Withdrawal rate 3.5%");
+  });
+
+  it("does not contain any markdown table syntax", () => {
+    const contributions = [
+      {
+        id: "c1",
+        positionId: "p1",
+        accountId: "a1",
+        monthlyAmount: 500,
+        displayName: "VWRL",
+        accountName: "ISA",
+      },
+      {
+        id: "c2",
+        positionId: "p2",
+        accountId: "a2",
+        monthlyAmount: 300,
+        displayName: "VUSA",
+        accountName: "SIPP",
+      },
+    ];
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    // Ensure no table pipes outside of code blocks
+    const outsideCodeBlocks = md.replace(/```[\s\S]*?```/g, "");
+    expect(outsideCodeBlocks).not.toContain("|--");
+  });
+
+  it("respects light theme for the embedded SVG", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "light");
+    const b64Match = md.match(/base64,([A-Za-z0-9+/=]+)\)/);
+    expect(b64Match).not.toBeNull();
+    const svg = Buffer.from(b64Match![1], "base64").toString("utf-8");
+    // Light theme uses different colours (hex + fill-opacity, no rgba)
+    expect(svg).toContain("#007AFF");
+    expect(svg).toContain('fill="#000000" fill-opacity="0.55"');
   });
 });

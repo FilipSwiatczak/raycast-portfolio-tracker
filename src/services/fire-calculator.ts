@@ -73,8 +73,15 @@ export function calculateProjection(input: FireCalculatorInput, now: Date = new 
   for (let n = 0; n <= maxYears; n++) {
     const year = currentYear + n;
     const age = year - yearOfBirth;
+
+    // Once FIRE is achieved, no more contributions are added — the portfolio
+    // just compounds. `fireYear` is set at the END of the iteration that hits
+    // the target, so the FIRE year itself still includes contributions (you're
+    // still working that year), but all subsequent years use zero.
+    const contribForYear = fireYear !== null ? 0 : annualContribution;
+
     const portfolioValue =
-      n === 0 ? currentPortfolioValue : projectYearValue(years[n - 1].portfolioValue, realRate, annualContribution);
+      n === 0 ? currentPortfolioValue : projectYearValue(years[n - 1].portfolioValue, realRate, contribForYear);
     const isTargetHit = portfolioValue >= targetValue;
     const isSippAccessible = age >= sippAccessAge;
 

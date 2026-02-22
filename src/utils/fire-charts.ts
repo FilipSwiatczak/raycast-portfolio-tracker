@@ -6,33 +6,35 @@
  *
  * The main export `buildDashboardMarkdown` assembles the complete markdown
  * for the FIRE dashboard, including:
- *   - Horizontal bar chart of the year-by-year projection
- *   - Target line marker and FIRE year highlight
- *   - Contributions summary table
+ *   - Status message with FIRE year or warning
+ *   - Progress bar showing current vs target portfolio value
+ *   - SVG stacked bar chart of the year-by-year projection (colour-coded
+ *     portfolio growth vs contribution impact)
+ *   - Compact contributions summary (emoji + bullet list, not a table)
+ *   - Assumptions footer line
  *
- * Chart design:
- *   Each row is a year. The bar width is proportional to the portfolio value
- *   relative to the maximum value in the projection. The target position is
- *   marked with a vertical │ line so the user can see progress towards it.
- *   The FIRE year row gets a 🎯 marker.
+ * The projection chart is rendered as an inline SVG image via a base64
+ * data URI, which gives us full colour control inside Raycast's Detail
+ * markdown. Each bar is split into two segments:
+ *   - Portfolio Growth (white/dark) — compound growth on existing holdings
+ *   - Contribution Impact (blue) — cumulative contributions + their growth
  *
- *   Example output:
- *   ```
- *   2025  ██████████░░░░░░░░░░│░░  £420K
- *   2026  ███████████░░░░░░░░░│░░  £462K
- *   ...
- *   2033  █████████████████████████  £1.0M  🎯 FIRE!
- *   ```
+ * A vertical dashed target line and green FIRE-year highlight complete
+ * the visualisation.
  */
 
 import { FireProjection, FireProjectionYear, FireSettings, FireContribution } from "./fire-types";
+import { buildProjectionSVG, ChartBar, ChartConfig } from "./fire-svg";
 
 // ──────────────────────────────────────────
 // Configuration
 // ──────────────────────────────────────────
 
-/** Maximum character width of the bar portion of the chart */
+/** Maximum character width of the bar portion of the ASCII projection chart */
 const BAR_WIDTH = 28;
+
+/** Maximum character width of the progress bar */
+const PROGRESS_WIDTH = 32;
 
 /** Filled block character for bar values */
 const CHAR_FILLED = "█";
@@ -50,10 +52,19 @@ const CHAR_TARGET = "│";
 /**
  * Builds the complete markdown content for the FIRE dashboard Detail view.
  *
+ * Layout:
+ *   1. Header + status blockquote
+ *   2. Progress bar (current → target)
+ *   3. Portfolio Projection SVG chart (stacked: growth + contributions)
+ *   4. Separator
+ *   5. Contributions summary (emoji list) or hint to add
+ *   6. Assumptions footer
+ *
  * @param projection     - The computed FIRE projection
  * @param settings       - Current FIRE settings (for display context)
  * @param baseCurrency   - User's base currency code (e.g. "GBP")
  * @param contributions  - Resolved contribution list with display names
+ * @param theme          - Raycast appearance ("light" | "dark") for SVG colours
  * @returns Markdown string ready for Raycast's Detail view
  */
 export function buildDashboardMarkdown(
@@ -61,6 +72,7 @@ export function buildDashboardMarkdown(
   settings: FireSettings,
   baseCurrency: string,
   contributions: Array<FireContribution & { displayName: string; accountName: string }>,
+  theme: "light" | "dark" = "dark",
 ): string {
   const lines: string[] = [];
 
@@ -80,68 +92,202 @@ export function buildDashboardMarkdown(
   }
   lines.push("");
 
-  // ── Projection Chart ──
+  // ── Progress Bar ──
+  const progressBar = buildProgressBar(projection.currentPortfolioValue, projection.targetValue, baseCurrency);
+  if (progressBar) {
+    lines.push(progressBar);
+    lines.push("");
+  }
+
+  // ── Projection Chart (SVG) ──
   lines.push("## Portfolio Projection");
   lines.push("");
-  lines.push(buildProjectionChart(projection.years, projection.targetValue, baseCurrency, projection.fireYear));
+
+  const chartBars = computeChartBars(projection, baseCurrency);
+  const chartConfig: ChartConfig = {
+    targetValue: projection.targetValue,
+    targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
+    theme,
+  };
+  const svg = buildProjectionSVG(chartBars, chartConfig);
+
+  if (svg) {
+    const b64 = Buffer.from(svg).toString("base64");
+    lines.push(`![FIRE Projection](data:image/svg+xml;base64,${b64})`);
+  } else {
+    // Fallback to ASCII chart if SVG fails (e.g. empty data)
+    lines.push(buildProjectionChart(projection.years, projection.targetValue, baseCurrency, projection.fireYear));
+  }
+  lines.push("");
+
+  // ── Footer ──
+  lines.push("---");
+  lines.push("");
+
+  // ── Contributions summary ──
+  lines.push(buildContributionsSummary(contributions, baseCurrency));
   lines.push("");
 
   // ── Assumptions ──
   const realRateDisplay = (settings.annualGrowthRate - settings.annualInflation).toFixed(1);
-  lines.push("---");
-  lines.push("");
   lines.push(
-    `*Growth ${settings.annualGrowthRate}% − Inflation ${settings.annualInflation}% = **${realRateDisplay}% real return** · ` +
+    `*📈 Growth ${settings.annualGrowthRate}% − Inflation ${settings.annualInflation}% = **${realRateDisplay}% real return** · ` +
       `Withdrawal rate ${settings.withdrawalRate}%*`,
   );
   lines.push("");
 
-  // ── Contributions Table ──
-  if (contributions.length > 0) {
-    lines.push("## Monthly Contributions");
-    lines.push("");
-    lines.push("| Position | Account | Monthly | Annual |");
-    lines.push("|----------|---------|--------:|-------:|");
+  return lines.join("\n");
+}
 
-    let totalMonthly = 0;
-    for (const c of contributions) {
-      const monthly = formatCompactValue(c.monthlyAmount, baseCurrency);
-      const annual = formatCompactValue(c.monthlyAmount * 12, baseCurrency);
-      lines.push(`| ${c.displayName} | ${c.accountName} | ${monthly} | ${annual} |`);
-      totalMonthly += c.monthlyAmount;
-    }
+// ──────────────────────────────────────────
+// Chart Data Decomposition
+// ──────────────────────────────────────────
 
-    if (contributions.length > 1) {
-      const totalMonthlyStr = formatCompactValue(totalMonthly, baseCurrency);
-      const totalAnnualStr = formatCompactValue(totalMonthly * 12, baseCurrency);
-      lines.push(`| **Total** | | **${totalMonthlyStr}** | **${totalAnnualStr}** |`);
-    }
+/**
+ * Decomposes the projection into stacked chart bars.
+ *
+ * For each projection year, splits the total portfolio value into:
+ *   - **Base growth**: compound growth on the initial portfolio (no contributions)
+ *   - **Contribution impact**: everything else (contributions + their growth)
+ *
+ * Base growth series: `bg[0] = initial`, `bg[n] = bg[n-1] × (1 + realRate)`
+ * Contribution component: `cc[n] = total[n] − bg[n]`
+ *
+ * @param projection   - Full FIRE projection result
+ * @param baseCurrency - Currency code for label formatting
+ * @returns Array of ChartBar objects ready for the SVG builder
+ */
+export function computeChartBars(projection: FireProjection, baseCurrency: string): ChartBar[] {
+  const { years, currentPortfolioValue, realGrowthRate } = projection;
+  if (years.length === 0) return [];
 
-    lines.push("");
-  } else {
-    lines.push("---");
-    lines.push("");
+  // Build the "no contributions" base growth series
+  const baseGrowthSeries: number[] = [currentPortfolioValue];
+  for (let i = 1; i < years.length; i++) {
+    baseGrowthSeries.push(baseGrowthSeries[i - 1] * (1 + realGrowthRate));
+  }
+
+  // Track first target hit for the isFireYear flag
+  let prevTargetHit = false;
+
+  return years.map((yearData, i) => {
+    const baseGrowthValue = baseGrowthSeries[i];
+    const contributionValue = Math.max(0, yearData.portfolioValue - baseGrowthValue);
+    const isFireYear = yearData.isTargetHit && !prevTargetHit;
+    prevTargetHit = yearData.isTargetHit;
+
+    return {
+      year: yearData.year,
+      label: formatCompactValue(yearData.portfolioValue, baseCurrency),
+      totalValue: yearData.portfolioValue,
+      baseGrowthValue,
+      contributionValue,
+      isFireYear,
+    };
+  });
+}
+
+// ──────────────────────────────────────────
+// Progress Bar
+// ──────────────────────────────────────────
+
+/**
+ * Builds a compact progress bar showing current vs target portfolio value.
+ *
+ * Rendered inside a code block for monospace alignment:
+ * ```
+ * ████████████░░░░░░░░░░░░░░░░░░░░  42%  £420K → £1.0M
+ * ```
+ *
+ * @param currentValue - Current included portfolio value
+ * @param targetValue  - FIRE target value
+ * @param baseCurrency - Currency code for labels
+ * @returns Markdown code block string, or empty string if target ≤ 0
+ */
+export function buildProgressBar(currentValue: number, targetValue: number, baseCurrency: string): string {
+  if (targetValue <= 0) return "";
+
+  const percent = Math.min(100, Math.round((currentValue / targetValue) * 100));
+  const filledCount = Math.round((percent / 100) * PROGRESS_WIDTH);
+  const emptyCount = PROGRESS_WIDTH - filledCount;
+
+  const bar = CHAR_FILLED.repeat(filledCount) + CHAR_EMPTY.repeat(emptyCount);
+  const currentLabel = formatCompactValue(currentValue, baseCurrency);
+  const targetLabel = formatCompactValue(targetValue, baseCurrency);
+
+  const codeLines: string[] = [];
+  codeLines.push("```");
+  codeLines.push(`${bar}  ${percent}%  ${currentLabel} → ${targetLabel}`);
+  codeLines.push("```");
+
+  return codeLines.join("\n");
+}
+
+// ──────────────────────────────────────────
+// Contributions Summary
+// ──────────────────────────────────────────
+
+/**
+ * Builds a compact contributions summary for the dashboard footer.
+ *
+ * Replaces the old markdown table with a clean emoji + bullet-list format:
+ *
+ * Single contribution:
+ *   💰 **£500/mo** → Vanguard S&P 500 · *Vanguard ISA* · £6,000/yr
+ *
+ * Multiple contributions:
+ *   💰 **Contributions: £800/mo** · £9,600/yr
+ *   - £500/mo → Vanguard S&P 500 · *Vanguard ISA*
+ *   - £300/mo → Apple Inc. · *Vanguard ISA*
+ *
+ * No contributions:
+ *   *💡 No monthly contributions configured. Add contributions (⌘⇧C) to ...*
+ *
+ * @param contributions  - Resolved contributions with display/account names
+ * @param baseCurrency   - Currency code for formatting
+ * @returns Markdown string (no trailing newline)
+ */
+export function buildContributionsSummary(
+  contributions: Array<FireContribution & { displayName: string; accountName: string }>,
+  baseCurrency: string,
+): string {
+  if (contributions.length === 0) {
+    return "*💡 No monthly contributions configured. Add contributions (⌘⇧C) to model how regular investing accelerates your FIRE date*";
+  }
+
+  const totalMonthly = contributions.reduce((sum, c) => sum + c.monthlyAmount, 0);
+  const lines: string[] = [];
+
+  if (contributions.length === 1) {
+    // Single contribution — compact one-liner
+    const c = contributions[0];
     lines.push(
-      "*No monthly contributions configured. Use the **Manage Contributions** action to add recurring investments.*",
+      `💰 **${formatCompactValue(c.monthlyAmount, baseCurrency)}/mo** → ${c.displayName} · *${c.accountName}* · ${formatCompactValue(c.monthlyAmount * 12, baseCurrency)}/yr`,
     );
-    lines.push("");
+  } else {
+    // Multiple contributions — header line + bullet list
+    const totalAnnual = totalMonthly * 12;
+    lines.push(
+      `💰 **Contributions: ${formatCompactValue(totalMonthly, baseCurrency)}/mo** · ${formatCompactValue(totalAnnual, baseCurrency)}/yr`,
+    );
+    for (const c of contributions) {
+      lines.push(`- ${formatCompactValue(c.monthlyAmount, baseCurrency)}/mo → ${c.displayName} · *${c.accountName}*`);
+    }
   }
 
   return lines.join("\n");
 }
 
 // ──────────────────────────────────────────
-// Projection Chart
+// ASCII Projection Chart (fallback)
 // ──────────────────────────────────────────
 
 /**
- * Builds a horizontal bar chart from projection data.
+ * Builds a horizontal ASCII bar chart from projection data.
  *
- * Uses a monospace code block for alignment. Each row shows:
+ * Kept as a fallback in case SVG rendering fails. Uses a monospace code
+ * block for alignment. Each row shows:
  *   YEAR  [bar with target marker]  VALUE  [optional FIRE marker]
- *
- * The target value position is shown as a │ vertical line within
- * the bar track so the user can see how close each year gets.
  *
  * @param years        - Projection year data points
  * @param targetValue  - The FIRE target value (for the marker position)
@@ -208,7 +354,7 @@ export function buildProjectionChart(
 // ──────────────────────────────────────────
 
 /**
- * Builds a single bar string with a target marker.
+ * Builds a single ASCII bar string with a target marker.
  *
  * The bar has three visual zones:
  *   1. Filled portion (█) — represents current value

@@ -208,6 +208,7 @@ export const environment = {
   commandName: "portfolio",
   extensionName: "portfolio-tracker",
   isDevelopment: true,
+  appearance: "dark",
   supportPath: "/tmp/raycast-portfolio-tracker-test",
   assetsPath: "/tmp/raycast-portfolio-tracker-test/assets",
 };

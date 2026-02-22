@@ -464,6 +464,62 @@ describe("calculateProjection — edge cases", () => {
       expect(projection.years[i].year).toBe(projection.years[i - 1].year + 1);
     }
   });
+
+  it("stops contributions after the FIRE year", () => {
+    const projection = calculateProjection(BASE_INPUT, FIXED_NOW);
+    expect(projection.fireYear).not.toBeNull();
+
+    // Find the FIRE year index and the year after it
+    const fireIdx = projection.years.findIndex((y) => y.year === projection.fireYear);
+    expect(fireIdx).toBeGreaterThan(0);
+    expect(fireIdx + 1).toBeLessThan(projection.years.length);
+
+    // The year AFTER FIRE should equal pure compound growth on the FIRE year value
+    // (no contributions added): postFireValue = fireValue × (1 + realRate)
+    const fireValue = projection.years[fireIdx].portfolioValue;
+    const realRate = projection.realGrowthRate;
+    const expectedPostFire = fireValue * (1 + realRate);
+    expect(projection.years[fireIdx + 1].portfolioValue).toBeCloseTo(expectedPostFire, 2);
+  });
+
+  it("FIRE year itself still includes contributions", () => {
+    const projection = calculateProjection(BASE_INPUT, FIXED_NOW);
+    expect(projection.fireYear).not.toBeNull();
+
+    const fireIdx = projection.years.findIndex((y) => y.year === projection.fireYear);
+    const preFire = projection.years[fireIdx - 1];
+    const realRate = projection.realGrowthRate;
+
+    // The FIRE year should equal compound growth + contributions (half-year approx)
+    const expectedWithContrib = projectYearValue(preFire.portfolioValue, realRate, BASE_INPUT.annualContribution);
+    expect(projection.years[fireIdx].portfolioValue).toBeCloseTo(expectedWithContrib, 2);
+  });
+
+  it("post-FIRE values still grow via compound interest (no contributions)", () => {
+    const projection = calculateProjection(BASE_INPUT, FIXED_NOW);
+    expect(projection.fireYear).not.toBeNull();
+
+    const fireIdx = projection.years.findIndex((y) => y.year === projection.fireYear);
+    const realRate = projection.realGrowthRate;
+
+    // Verify every post-FIRE year is pure compound growth on the previous year
+    for (let i = fireIdx + 1; i < projection.years.length; i++) {
+      const expected = projection.years[i - 1].portfolioValue * (1 + realRate);
+      expect(projection.years[i].portfolioValue).toBeCloseTo(expected, 2);
+    }
+  });
+
+  it("post-FIRE growth is slower than pre-FIRE growth", () => {
+    const projection = calculateProjection(BASE_INPUT, FIXED_NOW);
+    expect(projection.fireYear).not.toBeNull();
+
+    const fireIdx = projection.years.findIndex((y) => y.year === projection.fireYear);
+
+    // Pre-FIRE growth includes contributions, so the delta should be larger
+    const preFireDelta = projection.years[fireIdx].portfolioValue - projection.years[fireIdx - 1].portfolioValue;
+    const postFireDelta = projection.years[fireIdx + 1].portfolioValue - projection.years[fireIdx].portfolioValue;
+    expect(preFireDelta).toBeGreaterThan(postFireDelta);
+  });
 });
 
 // ──────────────────────────────────────────
