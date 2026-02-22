@@ -42,11 +42,11 @@ All data is stored locally using Raycast's `LocalStorage` API. No external datab
 
 ### Storage & Caching Strategy
 
-| What | Where | Granularity |
-|------|-------|-------------|
-| Portfolio data | `LocalStorage` (persisted) | Per-mutation (add/edit/delete) |
-| Asset prices | `Cache` (in-memory + disk) | Daily — `price:{symbol}:{YYYY-MM-DD}` |
-| FX rates | `Cache` (in-memory + disk) | Daily — `fx:{from}:{to}:{YYYY-MM-DD}` |
+| What           | Where                      | Granularity                           |
+| -------------- | -------------------------- | ------------------------------------- |
+| Portfolio data | `LocalStorage` (persisted) | Per-mutation (add/edit/delete)        |
+| Asset prices   | `Cache` (in-memory + disk) | Daily — `price:{symbol}:{YYYY-MM-DD}` |
+| FX rates       | `Cache` (in-memory + disk) | Daily — `fx:{from}:{to}:{YYYY-MM-DD}` |
 
 The daily cache ensures each symbol is fetched at most **once per day**, regardless of how many times you open the extension. Cache capacity is set to 5 MB (within Raycast's 10 MB default).
 
@@ -65,10 +65,10 @@ The extension uses [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) v3
 Yahoo Finance returns LSE-listed prices in **pence** (GBp), not pounds (GBP). The service layer automatically converts:
 
 | Yahoo returns | We normalise to | Divisor |
-|---------------|-----------------|---------|
-| `GBp` | `GBP` | ÷ 100 |
-| `ILA` | `ILS` | ÷ 100 |
-| `ZAc` | `ZAR` | ÷ 100 |
+| ------------- | --------------- | ------- |
+| `GBp`         | `GBP`           | ÷ 100   |
+| `ILA`         | `ILS`           | ÷ 100   |
+| `ZAc`         | `ZAR`           | ÷ 100   |
 
 Both price and daily change values are normalised together.
 
@@ -78,6 +78,7 @@ Both price and daily change values are normalised together.
 src/
 ├── portfolio.tsx                 # Main command — portfolio view
 ├── search-investments.tsx        # Search command — find & add investments
+├── fire.tsx                      # FIRE command — Financial Independence dashboard
 │
 ├── components/
 │   ├── AccountForm.tsx           # Create/edit account form
@@ -85,6 +86,9 @@ src/
 │   ├── BatchRenameForm.tsx       # Batch rename matching assets across accounts
 │   ├── EditPositionForm.tsx      # Edit asset: units + inline rename with batch detection
 │   ├── EmptyPortfolio.tsx        # First-launch empty state
+│   ├── FireContributions.tsx     # FIRE: manage recurring monthly contributions (single-frame)
+│   ├── FireDashboard.tsx         # FIRE: projection chart + key metrics (Detail view)
+│   ├── FireSetup.tsx             # FIRE: settings form (onboarding + edit)
 │   ├── PortfolioList.tsx         # Main portfolio list view
 │   ├── PositionListItem.tsx      # Individual position row (custom name aware)
 │   ├── SearchInvestmentsView.tsx # Type-ahead search UI
@@ -97,16 +101,20 @@ src/
 ├── hooks/
 │   ├── useAssetPrice.ts          # Fetch & cache a single asset price
 │   ├── useAssetSearch.ts         # Debounced type-ahead search
+│   ├── useFireSettings.ts        # FIRE settings CRUD (own LocalStorage key)
 │   ├── usePortfolio.ts           # Portfolio CRUD (LocalStorage)
 │   └── usePortfolioValue.ts      # Aggregate valuation across accounts
 │
 ├── services/
+│   ├── fire-calculator.ts        # FIRE projection engine (pure, zero side effects)
 │   ├── yahoo-finance.ts          # Yahoo Finance API client (single import point)
 │   └── price-cache.ts            # Daily price/FX cache layer
 │
 ├── utils/
 │   ├── constants.ts              # Config, labels, colour constants
 │   ├── errors.ts                 # Error classification & factory
+│   ├── fire-charts.ts            # FIRE ASCII chart builder (pure markdown output)
+│   ├── fire-types.ts             # FIRE TypeScript interfaces, enums & defaults
 │   ├── formatting.ts             # Currency, number, date, display name formatting
 │   ├── storage.ts                # LocalStorage read/write helpers
 │   ├── types.ts                  # All TypeScript interfaces & enums
@@ -117,6 +125,8 @@ src/
     ├── __mocks__/
     │   ├── raycast-api.ts        # Mock @raycast/api (Cache, LocalStorage, etc.)
     │   └── raycast-utils.ts      # Mock @raycast/utils (useCachedPromise, etc.)
+    ├── fire-calculator.test.ts   # 58 tests — FIRE projection engine
+    ├── fire-charts.test.ts       # 51 tests — chart builder & formatting
     ├── formatting.test.ts        # 107 tests — formatting & normalisation
     ├── yahoo-finance.test.ts     # 48 tests — API wrapper logic (mocked)
     └── portfolio-fixtures.ts     # Shared test data (accounts, positions, symbols)
@@ -128,6 +138,8 @@ src/
 2. **Hooks own state, components own UI** — hooks handle data fetching/mutation, components handle rendering. No API calls in components.
 3. **Pure utilities** — `formatting.ts`, `constants.ts`, and `types.ts` have zero side effects and no Raycast imports (except `Color` in constants). `formatting.ts` includes `getDisplayName()` and `hasCustomName()` helpers that resolve the custom name vs original name for consistent display across all components.
 4. **Test mocks mirror real API shapes** — mock data in tests uses actual Yahoo Finance response structures captured from live API calls.
+5. **Fresh-read mutations** — every mutation in `usePortfolio` reads the latest state from LocalStorage before writing (`await loadPortfolio()`) rather than using the React closure's `portfolio` value. This prevents stale closure bugs when Raycast's `push()` freezes callback props on pushed views. The `optimisticUpdate` callbacks still receive correct in-memory state for responsive UI.
+6. **Feature isolation** — the FIRE feature (`fire-calculator.ts`, `fire-charts.ts`, `fire-types.ts`) has zero Raycast imports and zero portfolio mutation logic. It reads portfolio data (via hooks) but stores its own configuration under a separate LocalStorage key (`fire-settings`). All FIRE calculation and chart-building functions are pure and fully testable without mocks.
 
 ## Development
 
@@ -147,17 +159,17 @@ npm install
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Raycast dev mode (hot reload) |
-| `npm run build` | Production build |
-| `npm test` | Run all 167 tests |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run lint` | Check ESLint + Prettier (Raycast CLI, local only) |
-| `npm run lint:eslint` | ESLint only (CI-portable, no Raycast CLI) |
-| `npm run lint:prettier` | Prettier format check (CI-portable) |
-| `npm run typecheck` | TypeScript type check (`tsc --noEmit`) |
-| `npm run fix-lint` | Auto-fix lint issues |
+| Command                 | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `npm run dev`           | Start Raycast dev mode (hot reload)               |
+| `npm run build`         | Production build                                  |
+| `npm test`              | Run all 276 tests                                 |
+| `npm run test:watch`    | Run tests in watch mode                           |
+| `npm run lint`          | Check ESLint + Prettier (Raycast CLI, local only) |
+| `npm run lint:eslint`   | ESLint only (CI-portable, no Raycast CLI)         |
+| `npm run lint:prettier` | Prettier format check (CI-portable)               |
+| `npm run typecheck`     | TypeScript type check (`tsc --noEmit`)            |
+| `npm run fix-lint`      | Auto-fix lint issues                              |
 
 ### Running in Raycast
 
@@ -169,18 +181,20 @@ This opens the extension in Raycast with hot reload. Changes to any file will be
 
 ### Extension Preferences
 
-| Preference | Type | Default | Description |
-|-----------|------|---------|-------------|
-| Base Currency | Dropdown | `GBP` | Currency for total portfolio value. All holdings are converted to this. Options: GBP, USD, EUR, CHF, JPY, CAD, AUD |
+| Preference    | Type     | Default | Description                                                                                                        |
+| ------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| Base Currency | Dropdown | `GBP`   | Currency for total portfolio value. All holdings are converted to this. Options: GBP, USD, EUR, CHF, JPY, CAD, AUD |
 
 ## Testing
 
 ### Test Architecture
 
-Tests are split into two files:
+Tests are split into four files:
 
 - **`formatting.test.ts`** (107 tests) — pure unit tests for all formatting, normalisation, and date utilities. No mocks needed.
 - **`yahoo-finance.test.ts`** (48 tests) — tests for the API wrapper layer with `yahoo-finance2` mocked at the module level.
+- **`fire-calculator.test.ts`** (58 tests) — pure unit tests for the FIRE projection engine: compound growth, FIRE number calculation, real rate conversion, day/working-day counting, full projection timelines, and edge cases.
+- **`fire-charts.test.ts`** (51 tests) — pure unit tests for the chart builder: bar construction, compact value formatting, projection chart output, and dashboard markdown assembly.
 
 ### Why Mock Yahoo Finance?
 
@@ -192,25 +206,36 @@ The `yahoo-finance2` library has a [known issue (#923)](https://github.com/gadic
 
 ### Test Coverage
 
-| Area | Tests | What's Verified |
-|------|-------|----------------|
-| Currency formatting | 24 | Symbol lookup, sign handling, decimal control |
-| Compact formatting | 12 | K/M/B suffixes, edge cases |
-| Number formatting | 9 | Decimals, separators, NaN/Infinity |
-| Unit formatting | 10 | Trailing zeros, fractional precision |
-| Percent formatting | 9 | Sign, decimals, large values |
-| Date formatting | 4 | ISO parsing, timezone handling |
-| Relative time | 7 | Minutes, hours, days, edge boundaries |
-| Date keys | 4 | YYYY-MM-DD format, current date |
-| Currency normalisation | 18 | GBp→GBP, ILA→ILS, ZAc→ZAR, pass-through |
-| Edge cases | 12 | Large numbers, very small values, NaN |
-| Search wrapper | 9 | Filtering, name extraction, type mapping |
-| Quote wrapper | 10 | Field mapping, GBp normalisation, USD pass-through |
-| Batch quotes | 5 | Parallel fetch, partial failure, empty input |
-| FX rates | 8 | Same-currency, real pairs, reciprocal check |
-| Asset type mapping | 4 | EQUITY, ETF, INDEX classification |
-| End-to-end flow | 3 | Search → Quote → FX → Position value calculation |
-| Normalisation edge cases | 4 | Price+change normalisation, percent pass-through, negatives |
+| Area                          | Tests  | What's Verified                                                |
+| ----------------------------- | ------ | -------------------------------------------------------------- |
+| Currency formatting           | 24     | Symbol lookup, sign handling, decimal control                  |
+| Compact formatting            | 12     | K/M/B suffixes, edge cases                                     |
+| Number formatting             | 9      | Decimals, separators, NaN/Infinity                             |
+| Unit formatting               | 10     | Trailing zeros, fractional precision                           |
+| Percent formatting            | 9      | Sign, decimals, large values                                   |
+| Date formatting               | 4      | ISO parsing, timezone handling                                 |
+| Relative time                 | 7      | Minutes, hours, days, edge boundaries                          |
+| Date keys                     | 4      | YYYY-MM-DD format, current date                                |
+| Currency normalisation        | 18     | GBp→GBP, ILA→ILS, ZAc→ZAR, pass-through                        |
+| Display name helpers          | 12     | getDisplayName, hasCustomName, edge cases                      |
+| Edge cases                    | 12     | Large numbers, very small values, NaN                          |
+| Search wrapper                | 9      | Filtering, name extraction, type mapping                       |
+| Quote wrapper                 | 10     | Field mapping, GBp normalisation, USD pass-through             |
+| Batch quotes                  | 5      | Parallel fetch, partial failure, empty input                   |
+| FX rates                      | 8      | Same-currency, real pairs, reciprocal check                    |
+| Asset type mapping            | 4      | EQUITY, ETF, INDEX classification                              |
+| End-to-end flow               | 3      | Search → Quote → FX → Position value calculation               |
+| Normalisation edge cases      | 4      | Price+change normalisation, percent pass-through, negatives    |
+| **FIRE: Real growth rate**    | **5**  | **Nominal → real conversion, zero, negative, high rates**      |
+| **FIRE: FIRE number**         | **7**  | **Spending + withdrawal rate → target, edge cases**            |
+| **FIRE: Year projection**     | **6**  | **Compound growth, contributions, zero/negative rates**        |
+| **FIRE: Contributions**       | **4**  | **Aggregation, filtering, empty/single**                       |
+| **FIRE: Days & working days** | **9**  | **Calendar days, fractional years, business days, holidays**   |
+| **FIRE: Full projection**     | **20** | **Timeline, FIRE year, SIPP, metrics, edge cases, accuracy**   |
+| **FIRE: Bar construction**    | **10** | **Fill, empty, target marker, boundaries, width preservation** |
+| **FIRE: Compact formatting**  | **20** | **K/M/B suffixes, currencies, negatives, boundaries**          |
+| **FIRE: Projection chart**    | **10** | **Code block, year lines, FIRE marker, legend, zero values**   |
+| **FIRE: Dashboard markdown**  | **11** | **Header, status, assumptions, contributions table, currency** |
 
 ### Running Tests
 
@@ -223,6 +248,12 @@ npx jest --testPathPattern=formatting
 
 # Just API wrapper
 npx jest --testPathPattern=yahoo-finance
+
+# Just FIRE calculator
+npx jest --testPathPattern=fire-calculator
+
+# Just FIRE charts
+npx jest --testPathPattern=fire-charts
 
 # Watch mode
 npm run test:watch
@@ -252,7 +283,8 @@ The test fixtures in `portfolio-fixtures.ts` define a realistic two-account port
 
 ## Registered Commands
 
-| Command | Title | Description |
-|---------|-------|-------------|
-| `portfolio` | Portfolio Tracker | View your investment portfolio and track net worth |
-| `search-investments` | Search Investments | Search for stocks, ETFs, and funds to add to your portfolio |
+| Command              | Title              | Description                                                                     |
+| -------------------- | ------------------ | ------------------------------------------------------------------------------- |
+| `portfolio`          | Portfolio Tracker  | View your investment portfolio and track net worth                              |
+| `search-investments` | Search Investments | Search for stocks, ETFs, and funds to add to your portfolio                     |
+| `fire`               | FIRE Dashboard     | Financial Independence, Retire Early — track your progress to financial freedom |

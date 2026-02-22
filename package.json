@@ -26,6 +26,13 @@
       "subtitle": "Portfolio",
       "description": "Search for stocks, ETFs, and funds to add to your portfolio",
       "mode": "view"
+    },
+    {
+      "name": "fire",
+      "title": "FIRE Dashboard",
+      "subtitle": "Portfolio",
+      "description": "Financial Independence, Retire Early — track your progress to financial freedom",
+      "mode": "view"
     }
   ],
   "preferences": [
