@@ -4,7 +4,7 @@
 3. Add cash positions handling ✅
 4. Add option to rename assets - custom name. Where over hover and in detailed view it would show original name. This is sometimes needed when Yahoo api returns cryptic names for certain assets. Batch rename is also supported where post-renaming a tooltip asks if other matchins assets should be renamed ✅
 5. Add a github pipeline for unit testing and linting, with separate PR branch and main treatment. ✅
-6. Fix "Add Position", where after adding, the context returns to search, leading user to believe the next search would add another position. This is a good flow overall. However the next search and "Add" in fact overwrites the previous position. Keep the flow but fix so that the next search Add adds a new position.
+6. Fix "Add Position", where after adding, the context returns to search, leading user to believe the next search would add another position. This is a good flow overall. However the next search and "Add" in fact overwrites the previous position. Keep the flow but fix so that the next search Add adds a new position. ✅
 
 ## PHASE 2
 1. Add portfolio graph over time. Separate command. Two displays: Line chart with adjustable time frame (both range and granularity(day, week:default, month, year)) showing the total asset value over time. Second graph showing same broken into a data series (line) for each account. Without pulling backdated asset valuation, with initial portfolio, this will be a single dot line on the graph - this is fine for this stage.

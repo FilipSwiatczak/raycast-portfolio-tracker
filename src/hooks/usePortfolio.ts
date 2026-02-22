@@ -16,6 +16,19 @@
  * - All mutation functions follow the pattern: update state → persist → revalidate
  * - Mutations are optimistic: the UI updates immediately, then persists in background
  * - Each mutation returns the updated portfolio for chaining if needed
+ *
+ * IMPORTANT — Fresh-read pattern for mutations:
+ * Every mutation reads the latest portfolio from LocalStorage via `await loadPortfolio()`
+ * rather than using the `portfolio` value from the React closure. This is critical
+ * because Raycast navigation `push()` freezes the props/callbacks of pushed views.
+ * When a user adds a position, pops back to search, and adds another, the `addPosition`
+ * closure captured by the pushed SearchInvestmentsView still holds the pre-first-add
+ * portfolio. Reading from storage on every mutation guarantees we always operate on
+ * the latest persisted state, preventing data loss from stale closures.
+ *
+ * The `optimisticUpdate` callbacks still receive the correct in-memory state from
+ * `useCachedPromise`, so the UI remains responsive. Only the storage write path
+ * is affected — it always reads fresh before writing.
  */
 
 import { useCallback } from "react";
@@ -133,7 +146,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: [...current.accounts, newAccount],
@@ -162,14 +175,14 @@ export function usePortfolio(): UsePortfolioReturn {
 
       return newAccount;
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const updateAccount = useCallback(
     async (accountId: string, updates: { name?: string; type?: AccountType }): Promise<void> => {
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -211,17 +224,18 @@ export function usePortfolio(): UsePortfolioReturn {
         title: "Account Updated",
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const removeAccount = useCallback(
     async (accountId: string): Promise<void> => {
-      const account = portfolio?.accounts.find((a) => a.id === accountId);
-      const accountName = account?.name ?? "Account";
+      // Read the account name from fresh storage before mutating (for the toast)
+      const fresh = await loadPortfolio();
+      const accountName = fresh.accounts.find((a) => a.id === accountId)?.name ?? "Account";
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.filter((a) => a.id !== accountId),
@@ -248,7 +262,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: accountName,
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   // ── Position Mutations ─────────────────
@@ -276,7 +290,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -309,14 +323,14 @@ export function usePortfolio(): UsePortfolioReturn {
 
       return newPosition;
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const updatePosition = useCallback(
     async (accountId: string, positionId: string, units: number): Promise<void> => {
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -357,7 +371,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: `Units set to ${units}`,
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const renamePosition = useCallback(
@@ -367,7 +381,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -412,18 +426,19 @@ export function usePortfolio(): UsePortfolioReturn {
         message: trimmed,
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const restorePositionName = useCallback(
     async (accountId: string, positionId: string): Promise<void> => {
-      // Find the original name for the toast message
-      const position = portfolio?.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
-      const originalName = position?.name ?? "Asset";
+      // Read the original name from fresh storage before mutating (for the toast)
+      const fresh = await loadPortfolio();
+      const originalName =
+        fresh.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId)?.name ?? "Asset";
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -479,7 +494,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: originalName,
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   const batchRenamePositions = useCallback(
@@ -532,13 +547,14 @@ export function usePortfolio(): UsePortfolioReturn {
 
   const removePosition = useCallback(
     async (accountId: string, positionId: string): Promise<void> => {
-      // Find the position display name for the toast message (respects custom name)
-      const position = portfolio?.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
+      // Read the position name from fresh storage before mutating (for the toast)
+      const fresh = await loadPortfolio();
+      const position = fresh.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
       const positionName = position ? getDisplayName(position) : "Position";
 
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: current.accounts.map((account) =>
@@ -579,7 +595,7 @@ export function usePortfolio(): UsePortfolioReturn {
         message: positionName,
       });
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   // ── Bulk Operations ─────────────────────
@@ -588,7 +604,7 @@ export function usePortfolio(): UsePortfolioReturn {
     async (accounts: Account[]): Promise<void> => {
       await mutate(
         (async () => {
-          const current = portfolio ?? (await loadPortfolio());
+          const current = await loadPortfolio();
           const updated: Portfolio = {
             ...current,
             accounts: [...current.accounts, ...accounts],
@@ -609,7 +625,7 @@ export function usePortfolio(): UsePortfolioReturn {
         },
       );
     },
-    [portfolio, mutate],
+    [mutate],
   );
 
   // ── Query Helpers ──────────────────────
