@@ -10,10 +10,11 @@
  *
  * Features:
  * - Add Units — navigates to a form to add purchased units to the position
- * - Edit Units — navigates to an edit form to change the number of units held
+ * - Edit Asset — navigates to an edit form to change units or rename the asset
  * - Remove Position — removes the position with confirmation alert
  * - Copy Symbol — copies the Yahoo Finance symbol to clipboard
- * - Copy Name — copies the asset name to clipboard
+ * - Copy Name — copies the display name (custom or original) to clipboard
+ * - Copy Original Name — copies the Yahoo Finance name (only shown when renamed)
  *
  * Usage:
  * ```tsx
@@ -31,8 +32,7 @@
 import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
 import { Position } from "../../utils/types";
-
-import { formatUnits } from "../../utils/formatting";
+import { getDisplayName, hasCustomName, formatUnits } from "../../utils/formatting";
 
 // ──────────────────────────────────────────
 // Props
@@ -73,20 +73,22 @@ interface PositionActionsProps {
  *
  * Actions:
  * 1. Add Units — increment the unit count (for periodic purchases)
- * 2. Edit Units — set an absolute unit count
+ * 2. Edit Asset — edit units, rename, or restore original name
  * 3. Remove Position — delete with confirmation (destructive)
  * 4. Copy Symbol — copies the Yahoo Finance symbol to clipboard
- * 5. Copy Name — copies the asset name to clipboard
+ * 5. Copy Name — copies the display name to clipboard
+ * 6. Copy Original Name — copies the original Yahoo Finance name (only if renamed)
  *
  * The delete action shows a confirmation alert before proceeding,
  * displaying the position name and current units for clarity.
  *
  * Keyboard shortcuts:
  * - ⇧⌘U → Add Units
- * - ⌘E → Edit Units
+ * - ⌘E → Edit Asset
  * - ⌃X → Remove Position (with confirmation)
  * - ⌘C → Copy Symbol
  * - ⇧⌘C → Copy Name
+ * - ⌥⌘C → Copy Original Name (when renamed)
  */
 export function PositionActions({
   position,
@@ -96,13 +98,16 @@ export function PositionActions({
   onEditPosition,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
+  const displayName = getDisplayName(position);
+  const isRenamed = hasCustomName(position);
+
   /**
    * Shows a confirmation dialog before removing the position.
-   * Displays the asset name and current unit count for the user to verify.
+   * Displays the asset display name and current unit count for the user to verify.
    */
   async function handleDeleteWithConfirmation() {
     const confirmed = await confirmAlert({
-      title: `Remove "${position.name}"?`,
+      title: `Remove "${displayName}"?`,
       message: `This will remove ${formatUnits(position.units)} unit${position.units === 1 ? "" : "s"} of ${position.symbol} from your account. This action cannot be undone.`,
       icon: { source: Icon.Trash, tintColor: Color.Red },
       primaryAction: {
@@ -121,7 +126,7 @@ export function PositionActions({
 
   return (
     <>
-      <ActionPanel.Section title={`${position.name} (${position.symbol})`}>
+      <ActionPanel.Section title={`${displayName} (${position.symbol})`}>
         <Action
           title="Add Units"
           icon={Icon.PlusSquare}
@@ -130,7 +135,7 @@ export function PositionActions({
         />
 
         <Action
-          title="Edit Units"
+          title="Edit Asset"
           icon={Icon.Pencil}
           shortcut={{ modifiers: ["cmd"], key: "e" }}
           onAction={onEditPosition}
@@ -154,9 +159,17 @@ export function PositionActions({
 
         <Action.CopyToClipboard
           title="Copy Name"
-          content={position.name}
+          content={displayName}
           shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
         />
+
+        {isRenamed && (
+          <Action.CopyToClipboard
+            title="Copy Original Name"
+            content={position.name}
+            shortcut={{ modifiers: ["cmd", "opt"], key: "c" }}
+          />
+        )}
       </ActionPanel.Section>
     </>
   );

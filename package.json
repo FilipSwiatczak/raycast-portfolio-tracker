@@ -5,7 +5,6 @@
   "description": "Track your investment portfolio and net worth in real time across multiple accounts",
   "icon": "extension-icon.png",
   "author": "filipawaits",
-  "owner": "weles-inc",
   "platforms": [
     "macOS"
   ],

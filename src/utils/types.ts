@@ -84,8 +84,15 @@ export interface Position {
   id: string;
   /** Yahoo Finance symbol, e.g. "VUSA.L", "AAPL" */
   symbol: string;
-  /** Human-readable name, e.g. "Vanguard S&P 500 UCITS ETF" */
+  /** Human-readable name as returned by Yahoo Finance, e.g. "Vanguard S&P 500 UCITS ETF" */
   name: string;
+  /**
+   * User-defined display name override.
+   * When set, this is used everywhere in the UI instead of `name`.
+   * The original `name` is still shown on hover tooltips and in the detail panel.
+   * Useful when Yahoo Finance returns cryptic or unhelpful names for certain assets.
+   */
+  customName?: string;
   /** Number of units held (supports fractional, e.g. 12.5) */
   units: number;
   /** Native currency of the asset, e.g. "GBP", "USD" */

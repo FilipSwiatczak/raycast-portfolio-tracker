@@ -46,7 +46,15 @@
 import React from "react";
 import { Color, Icon, List } from "@raycast/api";
 import { PositionValuation, AssetType } from "../utils/types";
-import { formatCurrency, formatCurrencyCompact, formatPercent, formatUnits, formatDate } from "../utils/formatting";
+import {
+  formatCurrency,
+  formatCurrencyCompact,
+  formatPercent,
+  formatUnits,
+  formatDate,
+  getDisplayName,
+  hasCustomName,
+} from "../utils/formatting";
 import { ASSET_TYPE_LABELS, COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
 
 // ──────────────────────────────────────────
@@ -108,6 +116,8 @@ export function PositionListItem({
   const icon = ASSET_TYPE_ICONS[position.assetType] ?? Icon.QuestionMarkCircle;
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
   const isCash = position.assetType === AssetType.CASH;
+  const displayName = getDisplayName(position);
+  const isRenamed = hasCustomName(position);
 
   const isCrossCurrency = position.currency !== baseCurrency;
   const hasPrice = currentPrice > 0;
@@ -125,7 +135,8 @@ export function PositionListItem({
   // Include account name so filtering by account name shows its positions.
   // Include symbol, type, and currency for broad searchability.
 
-  const keywords = [position.symbol, accountName, typeLabel, position.currency, position.name, "cash"];
+  // Include both display name and original name so filtering works with either.
+  const keywords = [position.symbol, accountName, typeLabel, position.currency, position.name, displayName, "cash"];
 
   // ── Mode-Specific Rendering ──
 
@@ -145,6 +156,8 @@ export function PositionListItem({
       fxRate,
       isCrossCurrency,
       baseCurrency,
+      displayName,
+      isRenamed,
       keywords,
       actions,
     });
@@ -160,6 +173,8 @@ export function PositionListItem({
     changePercent,
     changeColor,
     baseCurrency,
+    displayName,
+    isRenamed,
     keywords,
     actions,
   });
@@ -179,6 +194,8 @@ interface ListModeProps {
   changePercent: number;
   changeColor: Color;
   baseCurrency: string;
+  displayName: string;
+  isRenamed: boolean;
   keywords: string[];
   actions: React.JSX.Element;
 }
@@ -212,6 +229,8 @@ function renderListMode({
   changePercent,
   changeColor,
   baseCurrency,
+  displayName,
+  isRenamed,
   keywords,
   actions,
 }: ListModeProps): React.JSX.Element {
@@ -261,11 +280,14 @@ function renderListMode({
     });
   }
 
+  // Tooltip shows original name when the asset has been renamed
+  const titleTooltip = isRenamed ? `Original name: ${position.name}` : undefined;
+
   return (
     <List.Item
       id={position.id}
       icon={icon}
-      title={position.name}
+      title={{ value: displayName, tooltip: titleTooltip }}
       subtitle={subtitle}
       accessories={accessories}
       keywords={keywords}
@@ -293,6 +315,8 @@ interface DetailModeProps {
   fxRate: number;
   isCrossCurrency: boolean;
   baseCurrency: string;
+  displayName: string;
+  isRenamed: boolean;
   keywords: string[];
   actions: React.JSX.Element;
 }
@@ -331,6 +355,8 @@ function renderDetailMode({
   fxRate,
   isCrossCurrency,
   baseCurrency,
+  displayName,
+  isRenamed,
   keywords,
   actions,
 }: DetailModeProps): React.JSX.Element {
@@ -369,13 +395,15 @@ function renderDetailMode({
         fxRate,
         isCrossCurrency,
         baseCurrency,
+        displayName,
+        isRenamed,
       });
 
   return (
     <List.Item
       id={position.id}
       icon={icon}
-      title={position.name}
+      title={{ value: displayName, tooltip: isRenamed ? `Original name: ${position.name}` : undefined }}
       subtitle={subtitle}
       keywords={keywords}
       detail={detail}
@@ -469,6 +497,8 @@ function buildSecuritiesDetail({
   fxRate,
   isCrossCurrency,
   baseCurrency,
+  displayName,
+  isRenamed,
 }: {
   position: PositionValuation["position"];
   typeLabel: string;
@@ -482,13 +512,21 @@ function buildSecuritiesDetail({
   fxRate: number;
   isCrossCurrency: boolean;
   baseCurrency: string;
+  displayName: string;
+  isRenamed: boolean;
 }): React.JSX.Element {
   return (
     <List.Item.Detail
       metadata={
         <List.Item.Detail.Metadata>
           {/* ── Asset Info ── */}
-          <List.Item.Detail.Metadata.Label title="Asset" text={position.name} />
+          <List.Item.Detail.Metadata.Label title="Asset" text={displayName} />
+          {isRenamed && (
+            <List.Item.Detail.Metadata.Label
+              title="Original Name"
+              text={{ value: position.name, color: Color.SecondaryText }}
+            />
+          )}
           <List.Item.Detail.Metadata.Label title="Symbol" text={position.symbol} />
           <List.Item.Detail.Metadata.TagList title="Type">
             <List.Item.Detail.Metadata.TagList.Item text={typeLabel} />

@@ -16,6 +16,7 @@ Portfolio Tracker is a Raycast extension that lets you create investment account
 - Search for stocks, ETFs, and funds with real-time type-ahead powered by Yahoo Finance
 - Add positions with fractional share support
 - View total portfolio value with per-account breakdowns
+- Rename assets with custom display names (original name shown on hover and in detail view)
 - Automatic GBp → GBP (and other minor currency) normalisation for LSE-listed securities
 - Daily price caching to minimise API calls
 - Cross-currency support with FX rate conversion to your chosen base currency
@@ -29,10 +30,12 @@ Portfolio
 ├── Account[]
 │   ├── id, name, type (ISA | SIPP | GIA | Brokerage | ...)
 │   └── Position[]
-│       ├── id, symbol, name, units, currency, assetType
+│       ├── id, symbol, name, customName?, units, currency, assetType
 │       └── addedAt
 └── updatedAt
 ```
+
+> **Custom Names:** When `customName` is set on a position, it is used as the display name everywhere in the UI. The original Yahoo Finance `name` is preserved and shown on hover tooltips and in the detail panel. This is useful when Yahoo returns cryptic or unhelpful names for certain assets.
 
 All data is stored locally using Raycast's `LocalStorage` API. No external database or account required.
 
@@ -78,16 +81,17 @@ src/
 ├── components/
 │   ├── AccountForm.tsx           # Create/edit account form
 │   ├── AssetConfirmation.tsx     # Confirm adding a position (price + units)
-│   ├── EditPositionForm.tsx      # Edit existing position units
+│   ├── BatchRenameForm.tsx       # Batch rename matching assets across accounts
+│   ├── EditPositionForm.tsx      # Edit asset: units + inline rename with batch detection
 │   ├── EmptyPortfolio.tsx        # First-launch empty state
 │   ├── PortfolioList.tsx         # Main portfolio list view
-│   ├── PositionListItem.tsx      # Individual position row
+│   ├── PositionListItem.tsx      # Individual position row (custom name aware)
 │   ├── SearchInvestmentsView.tsx # Type-ahead search UI
 │   ├── SearchResultItem.tsx      # Individual search result row
 │   └── actions/
 │       ├── AccountActions.tsx    # Account-level action panel
 │       ├── PortfolioActions.tsx  # Portfolio-level action panel
-│       └── PositionActions.tsx   # Position-level action panel
+│       └── PositionActions.tsx   # Position-level action panel (custom name aware)
 │
 ├── hooks/
 │   ├── useAssetPrice.ts          # Fetch & cache a single asset price
@@ -102,7 +106,7 @@ src/
 ├── utils/
 │   ├── constants.ts              # Config, labels, colour constants
 │   ├── errors.ts                 # Error classification & factory
-│   ├── formatting.ts             # Currency, number, date formatting
+│   ├── formatting.ts             # Currency, number, date, display name formatting
 │   ├── storage.ts                # LocalStorage read/write helpers
 │   ├── types.ts                  # All TypeScript interfaces & enums
 │   ├── uuid.ts                   # UUID v4 generation
@@ -121,7 +125,7 @@ src/
 
 1. **Single import point for Yahoo Finance** — only `services/yahoo-finance.ts` imports `yahoo-finance2`. Everything else uses our typed wrapper.
 2. **Hooks own state, components own UI** — hooks handle data fetching/mutation, components handle rendering. No API calls in components.
-3. **Pure utilities** — `formatting.ts`, `constants.ts`, and `types.ts` have zero side effects and no Raycast imports (except `Color` in constants).
+3. **Pure utilities** — `formatting.ts`, `constants.ts`, and `types.ts` have zero side effects and no Raycast imports (except `Color` in constants). `formatting.ts` includes `getDisplayName()` and `hasCustomName()` helpers that resolve the custom name vs original name for consistent display across all components.
 4. **Test mocks mirror real API shapes** — mock data in tests uses actual Yahoo Finance response structures captured from live API calls.
 
 ## Development

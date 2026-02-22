@@ -12,6 +12,7 @@ import {
   PERCENT_DECIMALS,
   MINOR_CURRENCY_FACTORS,
 } from "./constants";
+import { Position } from "./types";
 
 // ──────────────────────────────────────────
 // Currency Formatting
@@ -212,6 +213,38 @@ export function formatRelativeTime(isoString: string): string {
  */
 export function getTodayDateKey(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+// ──────────────────────────────────────────
+// Display Name Resolution
+// ──────────────────────────────────────────
+
+/**
+ * Returns the display name for a position, preferring `customName` over the
+ * original Yahoo Finance `name`. Use this everywhere a position name is rendered
+ * so that user renames are applied consistently.
+ *
+ * @param position - The position to get the display name for
+ * @returns The custom name if set, otherwise the original name
+ *
+ * @example
+ * getDisplayName({ name: "VANGUARD S&P 500 UCITS ETF GBP ACC", customName: "Vanguard S&P 500" })
+ * // → "Vanguard S&P 500"
+ *
+ * getDisplayName({ name: "Apple Inc." })
+ * // → "Apple Inc."
+ */
+export function getDisplayName(position: Pick<Position, "name" | "customName">): string {
+  return position.customName?.trim() || position.name;
+}
+
+/**
+ * Returns `true` if a position has a custom name set (i.e. has been renamed).
+ *
+ * @param position - The position to check
+ */
+export function hasCustomName(position: Pick<Position, "customName">): boolean {
+  return !!position.customName?.trim();
 }
 
 // ──────────────────────────────────────────

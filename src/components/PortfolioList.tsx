@@ -39,7 +39,7 @@ import {
   SortField,
   SortDirection,
 } from "../utils/types";
-import { formatCurrency, formatCurrencyCompact, formatRelativeTime } from "../utils/formatting";
+import { formatCurrency, formatCurrencyCompact, formatRelativeTime, getDisplayName } from "../utils/formatting";
 import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_COLORS, SORT_OPTIONS, DEFAULT_SORT_KEY } from "../utils/constants";
 import { hasSampleAccounts } from "../utils/sample-portfolio";
 
@@ -570,7 +570,7 @@ function FallbackAccountSection({
           <List.Item
             key={position.id}
             icon={Icon.CircleProgress}
-            title={position.name}
+            title={getDisplayName(position)}
             subtitle={`${position.symbol} · Loading...`}
             keywords={[position.symbol, account.name, typeLabel]}
             actions={

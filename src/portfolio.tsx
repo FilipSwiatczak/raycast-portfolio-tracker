@@ -25,6 +25,7 @@ import { EditPositionForm } from "./components/EditPositionForm";
 import { AddUnitsForm } from "./components/AddUnitsForm";
 import { AddCashForm } from "./components/AddCashForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
+import { BatchRenameMatch } from "./components/BatchRenameForm";
 import { Account, Position, AccountType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
 import { clearPriceCache } from "./services/price-cache";
@@ -35,18 +36,22 @@ import { SAMPLE_ACCOUNTS, isSampleAccount } from "./utils/sample-portfolio";
 // ──────────────────────────────────────────
 
 export default function PortfolioCommand(): React.JSX.Element {
-  const { push } = useNavigation();
+  const { push, pop } = useNavigation();
 
   // ── Data Hooks ──
 
   const {
     portfolio,
     isLoading: isPortfolioLoading,
+    revalidate: revalidatePortfolio,
     addAccount,
     updateAccount,
     removeAccount,
     addPosition,
     updatePosition,
+    renamePosition,
+    restorePositionName,
+    batchRenamePositions,
     removePosition,
     mergeAccounts,
   } = usePortfolio();
@@ -116,14 +121,67 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  /**
+   * Finds all positions across the portfolio that share the same original
+   * Yahoo Finance name, excluding a specific position (the one just renamed).
+   */
+  function findMatchingPositions(originalName: string, excludePositionId: string): BatchRenameMatch[] {
+    if (!portfolio) return [];
+    const matches: BatchRenameMatch[] = [];
+
+    for (const acct of portfolio.accounts) {
+      for (const pos of acct.positions) {
+        if (pos.id !== excludePositionId && pos.name === originalName) {
+          matches.push({
+            accountId: acct.id,
+            accountName: acct.name,
+            position: pos,
+          });
+        }
+      }
+    }
+
+    return matches;
+  }
+
   function handleEditPosition(account: Account, position: Position): void {
     push(
       <EditPositionForm
         position={position}
         accountId={account.id}
         accountName={account.name}
-        onSubmit={async (units: number) => {
-          await updatePosition(account.id, position.id, units);
+        onSave={async (updates) => {
+          // ── 1. Save changes to the ORIGINAL asset ──
+          if (updates.unitsChanged) {
+            await updatePosition(account.id, position.id, updates.units);
+          }
+
+          let didRename = false;
+          if (updates.nameChanged) {
+            if (updates.customName) {
+              await renamePosition(account.id, position.id, updates.customName);
+              didRename = true;
+            } else {
+              await restorePositionName(account.id, position.id);
+            }
+          }
+
+          // ── 2. Return batch candidates (component handles phase transition) ──
+          if (didRename && updates.customName) {
+            return findMatchingPositions(position.name, position.id);
+          }
+
+          return [];
+        }}
+        onBatchApply={async (renames) => {
+          await batchRenamePositions(renames);
+        }}
+        onRestoreName={async () => {
+          await restorePositionName(account.id, position.id);
+        }}
+        onDone={() => {
+          pop();
+          revalidatePortfolio();
         }}
       />,
     );

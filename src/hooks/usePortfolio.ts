@@ -23,6 +23,7 @@ import { showToast, Toast } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { Portfolio, Account, Position, AccountType, AssetType } from "../utils/types";
 import { loadPortfolio, savePortfolio } from "../utils/storage";
+import { getDisplayName } from "../utils/formatting";
 import { generateId } from "../utils/uuid";
 
 // ──────────────────────────────────────────
@@ -67,8 +68,23 @@ export interface UsePortfolioReturn {
   /** Updates the units of an existing position */
   updatePosition: (accountId: string, positionId: string, units: number) => Promise<void>;
 
+  /** Sets a custom display name for a position (rename) */
+  renamePosition: (accountId: string, positionId: string, customName: string) => Promise<void>;
+
+  /** Removes the custom name, restoring the original Yahoo Finance name */
+  restorePositionName: (accountId: string, positionId: string) => Promise<void>;
+
   /** Removes a position from an account */
   removePosition: (accountId: string, positionId: string) => Promise<void>;
+
+  /**
+   * Renames multiple positions in a single atomic operation.
+   * Always loads fresh from LocalStorage to avoid stale closure issues.
+   * Used by BatchRenameForm after the original asset has already been saved.
+   */
+  batchRenamePositions: (
+    renames: Array<{ accountId: string; positionId: string; customName: string }>,
+  ) => Promise<void>;
 
   // ── Bulk Operations ──
 
@@ -344,11 +360,181 @@ export function usePortfolio(): UsePortfolioReturn {
     [portfolio, mutate],
   );
 
+  const renamePosition = useCallback(
+    async (accountId: string, positionId: string, customName: string): Promise<void> => {
+      const trimmed = customName.trim();
+      if (!trimmed) return;
+
+      await mutate(
+        (async () => {
+          const current = portfolio ?? (await loadPortfolio());
+          const updated: Portfolio = {
+            ...current,
+            accounts: current.accounts.map((account) =>
+              account.id === accountId
+                ? {
+                    ...account,
+                    positions: account.positions.map((pos) =>
+                      pos.id === positionId ? { ...pos, customName: trimmed } : pos,
+                    ),
+                  }
+                : account,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: currentData.accounts.map((account) =>
+                account.id === accountId
+                  ? {
+                      ...account,
+                      positions: account.positions.map((pos) =>
+                        pos.id === positionId ? { ...pos, customName: trimmed } : pos,
+                      ),
+                    }
+                  : account,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Asset Renamed",
+        message: trimmed,
+      });
+    },
+    [portfolio, mutate],
+  );
+
+  const restorePositionName = useCallback(
+    async (accountId: string, positionId: string): Promise<void> => {
+      // Find the original name for the toast message
+      const position = portfolio?.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
+      const originalName = position?.name ?? "Asset";
+
+      await mutate(
+        (async () => {
+          const current = portfolio ?? (await loadPortfolio());
+          const updated: Portfolio = {
+            ...current,
+            accounts: current.accounts.map((account) =>
+              account.id === accountId
+                ? {
+                    ...account,
+                    positions: account.positions.map((pos) => {
+                      if (pos.id === positionId) {
+                        // Remove customName by destructuring it out
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        const { customName, ...rest } = pos;
+                        return rest;
+                      }
+                      return pos;
+                    }),
+                  }
+                : account,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: currentData.accounts.map((account) =>
+                account.id === accountId
+                  ? {
+                      ...account,
+                      positions: account.positions.map((pos) => {
+                        if (pos.id === positionId) {
+                          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                          const { customName, ...rest } = pos;
+                          return rest;
+                        }
+                        return pos;
+                      }),
+                    }
+                  : account,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Name Restored",
+        message: originalName,
+      });
+    },
+    [portfolio, mutate],
+  );
+
+  const batchRenamePositions = useCallback(
+    async (renames: Array<{ accountId: string; positionId: string; customName: string }>): Promise<void> => {
+      if (renames.length === 0) return;
+
+      await mutate(
+        (async () => {
+          // Always load fresh from LocalStorage — never use the stale `portfolio`
+          // closure. This is critical: the original asset's rename was saved to
+          // storage moments ago, and we must read that updated state before
+          // applying the batch renames on top.
+          const current = await loadPortfolio();
+
+          let accounts = current.accounts;
+          for (const rename of renames) {
+            const trimmed = rename.customName.trim();
+            if (!trimmed) continue;
+
+            accounts = accounts.map((account) =>
+              account.id === rename.accountId
+                ? {
+                    ...account,
+                    positions: account.positions.map((pos) =>
+                      pos.id === rename.positionId ? { ...pos, customName: trimmed } : pos,
+                    ),
+                  }
+                : account,
+            );
+          }
+
+          const updated: Portfolio = {
+            ...current,
+            accounts,
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+      );
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Assets Renamed",
+        message: `${renames.length} position${renames.length === 1 ? "" : "s"} updated`,
+      });
+    },
+    [mutate], // No `portfolio` dependency — always loads fresh from storage
+  );
+
   const removePosition = useCallback(
     async (accountId: string, positionId: string): Promise<void> => {
-      // Find the position name for the toast message
+      // Find the position display name for the toast message (respects custom name)
       const position = portfolio?.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
-      const positionName = position?.name ?? "Position";
+      const positionName = position ? getDisplayName(position) : "Position";
 
       await mutate(
         (async () => {
@@ -475,6 +661,9 @@ export function usePortfolio(): UsePortfolioReturn {
 
     addPosition,
     updatePosition,
+    renamePosition,
+    restorePositionName,
+    batchRenamePositions,
     removePosition,
 
     mergeAccounts,

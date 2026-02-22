@@ -36,7 +36,7 @@ import { useState, useMemo } from "react";
 import { Position, AssetType } from "../utils/types";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { validateUnits, parseUnits } from "../utils/validation";
-import { formatUnits, formatCurrency } from "../utils/formatting";
+import { formatUnits, formatCurrency, getDisplayName } from "../utils/formatting";
 
 // ──────────────────────────────────────────
 // Props
@@ -98,7 +98,8 @@ export function AddUnitsForm({
   const currentUnitsDisplay = isCash ? formatCurrency(position.units, position.currency) : formatUnits(position.units);
 
   // Context-aware labels
-  const navTitle = isCash ? `Add Cash — ${position.name}` : `Add Units — ${position.name}`;
+  const displayName = getDisplayName(position);
+  const navTitle = isCash ? `Add Cash — ${displayName}` : `Add Units — ${displayName}`;
   const submitTitle = isCash ? "Add Cash" : "Add Units";
   const fieldTitle = isCash ? "Amount to Add" : "Units to Add";
   const fieldPlaceholder = isCash ? "e.g. 500, 1250.50, 10000" : "e.g. 10, 5.5, 0.25";
@@ -173,7 +174,7 @@ export function AddUnitsForm({
       }
     >
       {/* ── Read-Only Context ── */}
-      <Form.Description title="Asset" text={position.name} />
+      <Form.Description title="Asset" text={displayName} />
       {!isCash && <Form.Description title="Symbol" text={position.symbol} />}
       <Form.Description title="Type" text={typeLabel} />
       <Form.Description title="Currency" text={position.currency} />

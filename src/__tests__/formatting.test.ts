@@ -22,6 +22,8 @@ import {
   formatRelativeTime,
   getTodayDateKey,
   normaliseCurrencyPrice,
+  getDisplayName,
+  hasCustomName,
 } from "../utils/formatting";
 
 // ──────────────────────────────────────────
@@ -597,5 +599,67 @@ describe("Edge cases", () => {
   it("formatCurrencyCompact handles exactly 1,000,000,000", () => {
     const result = formatCurrencyCompact(1000000000, "GBP");
     expect(result).toBe("£1.0B");
+  });
+});
+
+// ──────────────────────────────────────────
+// getDisplayName
+// ──────────────────────────────────────────
+
+describe("getDisplayName", () => {
+  it("returns the original name when no custom name is set", () => {
+    expect(getDisplayName({ name: "Apple Inc.", customName: undefined })).toBe("Apple Inc.");
+  });
+
+  it("returns the original name when customName is not present", () => {
+    expect(getDisplayName({ name: "Vanguard S&P 500 UCITS ETF" })).toBe("Vanguard S&P 500 UCITS ETF");
+  });
+
+  it("returns the custom name when set", () => {
+    expect(getDisplayName({ name: "VANGUARD S&P 500 UCITS ETF GBP ACC", customName: "Vanguard S&P 500" })).toBe(
+      "Vanguard S&P 500",
+    );
+  });
+
+  it("falls back to original name when custom name is an empty string", () => {
+    expect(getDisplayName({ name: "Apple Inc.", customName: "" })).toBe("Apple Inc.");
+  });
+
+  it("falls back to original name when custom name is whitespace only", () => {
+    expect(getDisplayName({ name: "Apple Inc.", customName: "   " })).toBe("Apple Inc.");
+  });
+
+  it("trims whitespace from custom name", () => {
+    expect(getDisplayName({ name: "Apple Inc.", customName: "  My Apple  " })).toBe("My Apple");
+  });
+});
+
+// ──────────────────────────────────────────
+// hasCustomName
+// ──────────────────────────────────────────
+
+describe("hasCustomName", () => {
+  it("returns false when customName is undefined", () => {
+    expect(hasCustomName({ customName: undefined })).toBe(false);
+  });
+
+  it("returns false when customName is not present", () => {
+    expect(hasCustomName({})).toBe(false);
+  });
+
+  it("returns false when customName is an empty string", () => {
+    expect(hasCustomName({ customName: "" })).toBe(false);
+  });
+
+  it("returns false when customName is whitespace only", () => {
+    expect(hasCustomName({ customName: "   " })).toBe(false);
+  });
+
+  it("returns true when customName is set", () => {
+    expect(hasCustomName({ customName: "My Custom Name" })).toBe(true);
+  });
+
+  it("returns true when customName has leading/trailing spaces but non-empty content", () => {
+    expect(hasCustomName({ customName: "  Renamed  " })).toBe(true);
   });
 });
