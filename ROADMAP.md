@@ -3,7 +3,7 @@
 2. Prettify the UI and UX (this is a conversation mode - I'll describe in detail, back and forth with hot-reloads) ✅
 3. Add cash positions handling ✅
 4. Add option to rename assets - custom name. Where over hover and in detailed view it would show original name. This is sometimes needed when Yahoo api returns cryptic names for certain assets. Batch rename is also supported where post-renaming a tooltip asks if other matchins assets should be renamed ✅
-5. Add a github pipeline for unit testing and linting, with separate PR branch and main treatment. 
+5. Add a github pipeline for unit testing and linting, with separate PR branch and main treatment. ✅
 6. Fix "Add Position", where after adding, the context returns to search, leading user to believe the next search would add another position. This is a good flow overall. However the next search and "Add" in fact overwrites the previous position. Keep the flow but fix so that the next search Add adds a new position.
 
 ## PHASE 2

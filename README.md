@@ -2,6 +2,7 @@
 
 Track your investment portfolio and net worth in real time across multiple accounts, directly from Raycast.
 
+![CI](https://github.com/filipawaits/raycast-portfolio-tracker/actions/workflows/ci.yml/badge.svg)
 ![Stage](https://img.shields.io/badge/stage-1%20%E2%80%93%20core-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -150,9 +151,12 @@ npm install
 |---------|-------------|
 | `npm run dev` | Start Raycast dev mode (hot reload) |
 | `npm run build` | Production build |
-| `npm test` | Run all 155 tests |
+| `npm test` | Run all 167 tests |
 | `npm run test:watch` | Run tests in watch mode |
-| `npm run lint` | Check ESLint + Prettier |
+| `npm run lint` | Check ESLint + Prettier (Raycast CLI, local only) |
+| `npm run lint:eslint` | ESLint only (CI-portable, no Raycast CLI) |
+| `npm run lint:prettier` | Prettier format check (CI-portable) |
+| `npm run typecheck` | TypeScript type check (`tsc --noEmit`) |
 | `npm run fix-lint` | Auto-fix lint issues |
 
 ### Running in Raycast
@@ -252,28 +256,3 @@ The test fixtures in `portfolio-fixtures.ts` define a realistic two-account port
 |---------|-------|-------------|
 | `portfolio` | Portfolio Tracker | View your investment portfolio and track net worth |
 | `search-investments` | Search Investments | Search for stocks, ETFs, and funds to add to your portfolio |
-
-## Known Issues
-
-- **`package.json` owner validation**: The `owner` field (`weles-inc`) triggers a Raycast Store validation error during `ray lint` because the organisation isn't registered with Raycast. This does not affect development or functionality — only Store publishing.
-- **Yahoo Finance in Jest**: The `quote` endpoint fails inside Jest due to a consent/crumb flow bug in `yahoo-finance2` ([#923](https://github.com/gadicc/yahoo-finance2/issues/923)). Workaround: tests mock the library; runtime uses `quoteSummary` which works everywhere.
-
-## Roadmap
-
-### Stage 2 (Planned)
-- Portfolio value history (daily snapshots stored in LocalStorage)
-- Sparkline / chart visualisation of portfolio value over time
-- FIRE metrics (savings rate, FI number, time to FI)
-- Daily encouragement messages
-- Menu bar command showing portfolio value at all times
-
-### Stage 3 (Future)
-- Multiple portfolio support
-- Import/export portfolio data
-- Dividend tracking
-- Cost basis and P&L calculation
-- Benchmark comparison (vs S&P 500, etc.)
-
-## License
-
-MIT
