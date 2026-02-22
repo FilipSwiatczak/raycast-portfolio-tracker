@@ -299,7 +299,7 @@ export function FireSetup({
       actions={
         <ActionPanel>
           <Action.SubmitForm
-            title={isEditing ? "Save Changes" : "Start Tracking"}
+            title={isEditing ? "Save Changes" : "Configure Contributions"}
             icon={Icon.Checkmark}
             onSubmit={handleSubmit}
           />

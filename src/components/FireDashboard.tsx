@@ -252,31 +252,36 @@ export function FireDashboard({
           <Detail.Metadata.Separator />
 
           {/* ── FIRE Target Date ── */}
-          {projection.targetHitInWindow ? (
-            <>
-              <Detail.Metadata.Label
-                title="🎯 FIRE Year"
-                text={{
-                  value: String(projection.fireYear),
-                  color: Color.Green,
-                }}
-              />
-              <Detail.Metadata.Label title="Age at FIRE" text={`${projection.fireAge}`} />
-              <Detail.Metadata.Label
-                title="Years to FIRE"
-                text={`${(projection.fireYear ?? currentYear) - currentYear}`}
-              />
-              <Detail.Metadata.Separator />
-              <Detail.Metadata.Label
-                title="Days to FIRE"
-                text={projection.daysToFire !== null ? projection.daysToFire.toLocaleString("en") : "—"}
-              />
-              <Detail.Metadata.Label
-                title="Working Days"
-                text={projection.workingDaysToFire !== null ? projection.workingDaysToFire.toLocaleString("en") : "—"}
-              />
-            </>
-          ) : (
+          {projection.targetHitInWindow && (
+            <Detail.Metadata.Label
+              title="🎯 FIRE Year"
+              text={{
+                value: String(projection.fireYear),
+                color: Color.Green,
+              }}
+            />
+          )}
+          {projection.targetHitInWindow && <Detail.Metadata.Label title="Age at FIRE" text={`${projection.fireAge}`} />}
+          {projection.targetHitInWindow && (
+            <Detail.Metadata.Label
+              title="Years to FIRE"
+              text={`${(projection.fireYear ?? currentYear) - currentYear}`}
+            />
+          )}
+          {projection.targetHitInWindow && <Detail.Metadata.Separator />}
+          {projection.targetHitInWindow && (
+            <Detail.Metadata.Label
+              title="Days to FIRE"
+              text={projection.daysToFire !== null ? projection.daysToFire.toLocaleString("en") : "—"}
+            />
+          )}
+          {projection.targetHitInWindow && (
+            <Detail.Metadata.Label
+              title="Working Days"
+              text={projection.workingDaysToFire !== null ? projection.workingDaysToFire.toLocaleString("en") : "—"}
+            />
+          )}
+          {!projection.targetHitInWindow && (
             <Detail.Metadata.Label
               title="⚠️ FIRE Year"
               text={{

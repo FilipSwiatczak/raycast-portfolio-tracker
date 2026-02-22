@@ -67,9 +67,15 @@ export interface FireContributionsProps {
 
   /**
    * Callback to signal completion — typically pops the nav stack.
-   * Called when the user explicitly chooses "Done".
+   * Called when the user explicitly chooses "Done" / "Show Projection".
    */
   onDone: () => void;
+
+  /**
+   * Label for the primary completion action button.
+   * Defaults to "Done". Use "Show Projection" for the onboarding flow.
+   */
+  doneTitle?: string;
 }
 
 // ──────────────────────────────────────────
@@ -102,6 +108,7 @@ export function FireContributions({
   baseCurrency,
   onSave,
   onDone,
+  doneTitle = "Done",
 }: FireContributionsProps): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>("list");
   const [localContributions, setLocalContributions] = useState<FireContribution[]>(contributions);
@@ -267,8 +274,8 @@ export function FireContributions({
             <ActionPanel>
               {hasPositions && <Action title="Add Contribution" icon={Icon.Plus} onAction={() => setPhase("add")} />}
               <Action
-                title="Done"
-                icon={Icon.Checkmark}
+                title={doneTitle}
+                icon={doneTitle === "Done" ? Icon.Checkmark : Icon.LineChart}
                 shortcut={{ modifiers: ["cmd"], key: "return" }}
                 onAction={onDone}
               />
@@ -330,8 +337,8 @@ export function FireContributions({
                     </ActionPanel.Section>
                     <ActionPanel.Section>
                       <Action
-                        title="Done"
-                        icon={Icon.Checkmark}
+                        title={doneTitle}
+                        icon={doneTitle === "Done" ? Icon.Checkmark : Icon.LineChart}
                         shortcut={{ modifiers: ["cmd"], key: "return" }}
                         onAction={onDone}
                       />

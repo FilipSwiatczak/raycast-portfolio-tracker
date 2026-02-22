@@ -16,21 +16,21 @@
     {
       "name": "portfolio",
       "title": "Portfolio Tracker",
-      "subtitle": "Portfolio",
+      "subtitle": "Portfolio Tracker",
       "description": "View your investment portfolio and track net worth",
       "mode": "view"
     },
     {
       "name": "search-investments",
       "title": "Search Investments",
-      "subtitle": "Portfolio",
+      "subtitle": "Portfolio Tracker",
       "description": "Search for stocks, ETFs, and funds to add to your portfolio",
       "mode": "view"
     },
     {
       "name": "fire",
       "title": "FIRE Dashboard",
-      "subtitle": "Portfolio",
+      "subtitle": "Portfolio Tracker",
       "description": "Financial Independence, Retire Early — track your progress to financial freedom",
       "mode": "view"
     }
