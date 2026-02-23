@@ -34,6 +34,34 @@ import { buildProjectionSVG, ChartBar, ChartConfig } from "./fire-svg";
 import { buildSplitProjectionSVG, SplitChartBar, SplitChartConfig } from "./fire-svg-split";
 
 // ──────────────────────────────────────────
+// Dashboard Result Type
+// ──────────────────────────────────────────
+
+/**
+ * Rich return type from `buildDashboardMarkdown`.
+ *
+ * Exposes the raw SVG strings alongside the assembled markdown so the
+ * dashboard component can pass them to Open / Download actions without
+ * re-computing.
+ */
+export interface DashboardMarkdownResult {
+  /** Full markdown string ready for Raycast's Detail view */
+  markdown: string;
+
+  /** Raw SVG string for the growth projection chart, or null if not rendered */
+  growthSvg: string | null;
+
+  /** Raw SVG string for the accessible-vs-locked split chart, or null */
+  splitSvg: string | null;
+
+  /** Human-readable calculation summary for the growth chart */
+  growthSummary: string | null;
+
+  /** Human-readable calculation summary for the split chart */
+  splitSummary: string | null;
+}
+
+// ──────────────────────────────────────────
 // Configuration
 // ──────────────────────────────────────────
 
@@ -105,8 +133,14 @@ export function buildDashboardMarkdown(
   contributions: Array<FireContribution & { displayName: string; accountName: string }>,
   theme: "light" | "dark" = "dark",
   splitData?: SplitPortfolioData,
-): string {
+): DashboardMarkdownResult {
   const lines: string[] = [];
+
+  // Track raw SVGs for the result
+  let growthSvg: string | null = null;
+  let splitSvg: string | null = null;
+  let growthSummary: string | null = null;
+  let splitSummary: string | null = null;
 
   // ── Header ──
   lines.push("# 🔥 FIRE Dashboard");
@@ -135,16 +169,20 @@ export function buildDashboardMarkdown(
   lines.push("## Portfolio Projection");
   lines.push("");
 
+  growthSummary = buildGrowthChartSummary(projection, settings, baseCurrency);
+
   const chartBars = computeChartBars(projection, baseCurrency);
   const chartConfig: ChartConfig = {
     targetValue: projection.targetValue,
     targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
     theme,
     title: "Growth with contributions",
+    tooltip: growthSummary,
   };
   const svg = buildProjectionSVG(chartBars, chartConfig);
 
   if (svg) {
+    growthSvg = svg;
     const b64 = Buffer.from(svg).toString("base64");
     lines.push(`![FIRE Projection](data:image/svg+xml;base64,${b64})`);
   } else {
@@ -155,6 +193,8 @@ export function buildDashboardMarkdown(
 
   // ── Split Chart: Accessible vs Locked (SVG) ──
   if (splitData && (splitData.lockedValue > 0 || splitData.lockedAnnualContribution > 0)) {
+    splitSummary = buildSplitChartSummary(projection, settings, splitData, baseCurrency);
+
     const splitBars = computeSplitChartBars(projection, splitData, settings, baseCurrency);
     if (splitBars.length > 0) {
       const sippAccessYear = settings.yearOfBirth + settings.sippAccessAge;
@@ -168,10 +208,12 @@ export function buildDashboardMarkdown(
             : null,
         theme,
         title: "Accessible vs Locked",
+        tooltip: splitSummary,
       };
-      const splitSvg = buildSplitProjectionSVG(splitBars, splitConfig);
-      if (splitSvg) {
-        const splitB64 = Buffer.from(splitSvg).toString("base64");
+      const builtSplitSvg = buildSplitProjectionSVG(splitBars, splitConfig);
+      if (builtSplitSvg) {
+        splitSvg = builtSplitSvg;
+        const splitB64 = Buffer.from(builtSplitSvg).toString("base64");
         lines.push(`![Split Projection](data:image/svg+xml;base64,${splitB64})`);
         lines.push("");
       }
@@ -193,6 +235,146 @@ export function buildDashboardMarkdown(
       `Withdrawal rate ${settings.withdrawalRate}%*`,
   );
   lines.push("");
+
+  return {
+    markdown: lines.join("\n"),
+    growthSvg,
+    splitSvg,
+    growthSummary,
+    splitSummary,
+  };
+}
+
+// ──────────────────────────────────────────
+// Chart Calculation Summaries
+// ──────────────────────────────────────────
+
+/**
+ * Builds a human-readable calculation summary for the growth projection chart.
+ *
+ * Uses sample values from the projection to illustrate the compound growth
+ * formula with real numbers, making the chart self-documenting.
+ *
+ * This text is:
+ *   - Embedded as an SVG `<title>` (tooltip when chart is opened in browser)
+ *   - Available to the dashboard component for any other display purpose
+ *
+ * @param projection   - Full FIRE projection result
+ * @param settings     - Current FIRE settings
+ * @param baseCurrency - Currency code for formatting
+ * @returns Multi-line summary string
+ */
+export function buildGrowthChartSummary(
+  projection: FireProjection,
+  settings: FireSettings,
+  baseCurrency: string,
+): string {
+  const realRate = settings.annualGrowthRate - settings.annualInflation;
+  const startValue = formatCompactValue(projection.currentPortfolioValue, baseCurrency);
+  const targetLabel = formatCompactValue(projection.targetValue, baseCurrency);
+  const contribLabel =
+    projection.annualContribution > 0
+      ? formatCompactValue(projection.annualContribution, baseCurrency) + "/yr"
+      : "none";
+
+  const lines: string[] = [];
+  lines.push("FIRE Growth Projection");
+  lines.push("---------------------------------------");
+  lines.push(`Starting Portfolio: ${startValue}`);
+  lines.push(`FIRE Target: ${targetLabel}`);
+  lines.push(
+    `Real Return: ${realRate.toFixed(1)}% (${settings.annualGrowthRate}% growth - ${settings.annualInflation}% inflation)`,
+  );
+  lines.push(`Annual Contributions: ${contribLabel}`);
+  lines.push("");
+
+  // Pick a sample year (year index 1 if it exists) to illustrate the formula
+  if (projection.years.length >= 2) {
+    const y0 = projection.years[0];
+    const y1 = projection.years[1];
+    const growthAmount = y0.portfolioValue * (realRate / 100);
+    const contribAmount = projection.annualContribution;
+    lines.push("How it works:");
+    lines.push(
+      `  ${y0.year}: ${formatCompactValue(y0.portfolioValue, baseCurrency)} ` +
+        `x ${realRate.toFixed(1)}% = +${formatCompactValue(growthAmount, baseCurrency)} growth` +
+        (contribAmount > 0 ? ` + ${formatCompactValue(contribAmount, baseCurrency)} contributions` : ""),
+    );
+    lines.push(`  ${y1.year}: ${formatCompactValue(y1.portfolioValue, baseCurrency)} (compounding continues)`);
+    lines.push("");
+  }
+
+  if (projection.targetHitInWindow) {
+    lines.push(
+      `Projected FIRE: ${projection.fireYear} (age ${projection.fireAge}) ` +
+        `- ${(projection.fireYear ?? 0) - new Date().getFullYear()} years from now`,
+    );
+  } else {
+    lines.push("Target not reached within 30-year projection window.");
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Builds a human-readable calculation summary for the split projection chart.
+ *
+ * Explains the accessible vs locked breakdown using the user's actual
+ * starting values and SIPP access age.
+ *
+ * @param projection   - Full FIRE projection result
+ * @param settings     - Current FIRE settings
+ * @param splitData    - Accessible/locked starting values and contributions
+ * @param baseCurrency - Currency code for formatting
+ * @returns Multi-line summary string
+ */
+export function buildSplitChartSummary(
+  projection: FireProjection,
+  settings: FireSettings,
+  splitData: SplitPortfolioData,
+  baseCurrency: string,
+): string {
+  const realRate = settings.annualGrowthRate - settings.annualInflation;
+  const sippYear = settings.yearOfBirth + settings.sippAccessAge;
+
+  const lines: string[] = [];
+  lines.push("Accessible vs Locked Split");
+  lines.push("---------------------------------------");
+  lines.push(`Accessible (ISA/GIA): ${formatCompactValue(splitData.accessibleValue, baseCurrency)}`);
+  lines.push(`Locked (SIPP/401K): ${formatCompactValue(splitData.lockedValue, baseCurrency)}`);
+  lines.push(
+    `Contributions: ${formatCompactValue(splitData.accessibleAnnualContribution, baseCurrency)}/yr accessible, ` +
+      `${formatCompactValue(splitData.lockedAnnualContribution, baseCurrency)}/yr locked`,
+  );
+  lines.push(`Both grow at ${realRate.toFixed(1)}% real return.`);
+  lines.push("");
+  lines.push(`Pension Access: age ${settings.sippAccessAge} (${sippYear})`);
+  lines.push("Locked funds shown as 'Unlocked' after pension access age.");
+  lines.push("");
+
+  // Show a sample year where the split is visible
+  if (projection.years.length >= 2) {
+    const midIdx = Math.min(Math.floor(projection.years.length / 2), projection.years.length - 1);
+    const midYear = projection.years[midIdx];
+    // Re-derive approximate split at midpoint using compound growth
+    const n = midIdx;
+    const r = realRate / 100;
+    const accAtMid =
+      splitData.accessibleValue * Math.pow(1 + r, n) +
+      splitData.accessibleAnnualContribution * ((Math.pow(1 + r, n) - 1) / r) * (1 + r / 2);
+    const lockAtMid =
+      splitData.lockedValue * Math.pow(1 + r, n) +
+      splitData.lockedAnnualContribution * ((Math.pow(1 + r, n) - 1) / r) * (1 + r / 2);
+    lines.push(
+      `Example (${midYear.year}): ~${formatCompactValue(accAtMid, baseCurrency)} accessible + ` +
+        `~${formatCompactValue(lockAtMid, baseCurrency)} locked`,
+    );
+  }
+
+  if (projection.targetHitInWindow) {
+    lines.push("");
+    lines.push(`FIRE target reached: ${projection.fireYear} (age ${projection.fireAge})`);
+  }
 
   return lines.join("\n");
 }

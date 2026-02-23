@@ -18,7 +18,10 @@ import {
   buildProgressBar,
   buildContributionsSummary,
   buildDashboardMarkdown,
+  buildGrowthChartSummary,
+  buildSplitChartSummary,
   computeChartBars,
+  SplitPortfolioData,
 } from "../utils/fire-charts";
 import { buildProjectionSVG, ChartBar, ChartConfig } from "../utils/fire-svg";
 import { FireContribution, FireProjection, FireProjectionYear, FireSettings } from "../utils/fire-types";
@@ -957,13 +960,13 @@ describe("buildDashboardMarkdown", () => {
 
   it("includes the FIRE Dashboard header", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", []);
     expect(md).toContain("# 🔥 FIRE Dashboard");
   });
 
   it("shows 'On track' message when target is hit", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", []);
     expect(md).toContain("On track!");
     expect(md).toContain("2033");
     expect(md).toContain("age 43");
@@ -971,14 +974,14 @@ describe("buildDashboardMarkdown", () => {
 
   it("shows warning message when target is not hit", () => {
     const projection = makeProjection({ targetHit: false });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", []);
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", []);
     expect(md).toContain("⚠️");
     expect(md).toContain("Target not reached");
   });
 
   it("includes the progress bar", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     // Progress bar shows current → target with percentage
     expect(md).toContain("£200K");
     expect(md).toContain("→");
@@ -988,19 +991,19 @@ describe("buildDashboardMarkdown", () => {
 
   it("includes the Portfolio Projection section", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("## Portfolio Projection");
   });
 
   it("embeds the SVG chart as a base64 data URI image", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("![FIRE Projection](data:image/svg+xml;base64,");
   });
 
   it("SVG contains stacked bar data (base growth + contributions)", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     // Decode the base64 SVG and check it contains expected elements
     const b64Match = md.match(/base64,([A-Za-z0-9+/=]+)\)/);
     expect(b64Match).not.toBeNull();
@@ -1012,7 +1015,7 @@ describe("buildDashboardMarkdown", () => {
 
   it("includes assumptions line with emoji, growth, inflation, and withdrawal rate", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("📈");
     expect(md).toContain("Growth 7%");
     expect(md).toContain("Inflation 2.5%");
@@ -1041,7 +1044,7 @@ describe("buildDashboardMarkdown", () => {
     ];
 
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
     // Compact emoji list, not a table
     expect(md).toContain("💰");
     expect(md).toContain("Vanguard S&P 500");
@@ -1054,7 +1057,7 @@ describe("buildDashboardMarkdown", () => {
 
   it("shows hint when no contributions exist", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(md).toContain("No monthly contributions configured");
     expect(md).toContain("⌘⇧C");
   });
@@ -1072,7 +1075,7 @@ describe("buildDashboardMarkdown", () => {
     ];
 
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
     expect(md).toContain("💰");
     expect(md).toContain("VUSA.L");
     expect(md).toContain("ISA");
@@ -1083,16 +1086,16 @@ describe("buildDashboardMarkdown", () => {
 
   it("uses the correct currency symbol", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const mdGBP = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: mdGBP } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(mdGBP).toContain("£");
 
-    const mdUSD = buildDashboardMarkdown(projection, testSettings, "USD", [], "dark");
+    const { markdown: mdUSD } = buildDashboardMarkdown(projection, testSettings, "USD", [], "dark");
     expect(mdUSD).toContain("$");
   });
 
   it("contains the projection chart as an SVG image", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     // Chart is rendered as a base64-encoded SVG image, not an ASCII code block
     expect(md).toContain("data:image/svg+xml;base64,");
     expect(md).toContain("![FIRE Projection]");
@@ -1106,7 +1109,7 @@ describe("buildDashboardMarkdown", () => {
       withdrawalRate: 3.5,
     };
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, customSettings, "GBP", [], "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, customSettings, "GBP", [], "dark");
     expect(md).toContain("Growth 10%");
     expect(md).toContain("Inflation 3%");
     expect(md).toContain("7.0% real return");
@@ -1133,7 +1136,7 @@ describe("buildDashboardMarkdown", () => {
       },
     ];
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", contributions, "dark");
     // Ensure no table pipes outside of code blocks
     const outsideCodeBlocks = md.replace(/```[\s\S]*?```/g, "");
     expect(outsideCodeBlocks).not.toContain("|--");
@@ -1141,12 +1144,240 @@ describe("buildDashboardMarkdown", () => {
 
   it("respects light theme for the embedded SVG", () => {
     const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
-    const md = buildDashboardMarkdown(projection, testSettings, "GBP", [], "light");
+    const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", [], "light");
     const b64Match = md.match(/base64,([A-Za-z0-9+/=]+)\)/);
     expect(b64Match).not.toBeNull();
     const svg = Buffer.from(b64Match![1], "base64").toString("utf-8");
     // Light theme uses different colours (hex + fill-opacity, no rgba)
     expect(svg).toContain("#007AFF");
     expect(svg).toContain('fill="#000000" fill-opacity="0.55"');
+  });
+
+  // ── Result shape tests ──
+
+  it("returns growthSvg as a raw SVG string", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const result = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(result.growthSvg).not.toBeNull();
+    expect(result.growthSvg).toContain("<svg");
+    expect(result.growthSvg).toContain("</svg>");
+  });
+
+  it("returns null splitSvg when no split data is provided", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const result = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(result.splitSvg).toBeNull();
+  });
+
+  it("returns growthSummary as a non-empty string", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const result = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(result.growthSummary).not.toBeNull();
+    expect(result.growthSummary!.length).toBeGreaterThan(0);
+  });
+
+  it("embeds the growth summary as an SVG <title> tooltip", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const result = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
+    expect(result.growthSvg).toContain("<title>");
+    expect(result.growthSvg).toContain("FIRE Growth Projection");
+  });
+});
+
+// ──────────────────────────────────────────
+// buildGrowthChartSummary
+// ──────────────────────────────────────────
+
+describe("buildGrowthChartSummary", () => {
+  const testSettings: FireSettings = {
+    targetValue: 1_000_000,
+    withdrawalRate: 4,
+    annualInflation: 2.5,
+    annualGrowthRate: 7,
+    yearOfBirth: 1990,
+    holidayEntitlement: 25,
+    sippAccessAge: 57,
+    excludedAccountIds: [],
+    contributions: [],
+    updatedAt: "2025-01-15T00:00:00.000Z",
+  };
+
+  function makeProjection(opts: { targetHit: boolean; fireYear?: number; fireAge?: number }): FireProjection {
+    const years: FireProjectionYear[] = [];
+    for (let i = 0; i < 10; i++) {
+      years.push({
+        year: 2025 + i,
+        age: 35 + i,
+        portfolioValue: 200_000 + i * 100_000,
+        isTargetHit: opts.targetHit && 200_000 + i * 100_000 >= 1_000_000,
+        isSippAccessible: false,
+      });
+    }
+
+    return {
+      years,
+      fireYear: opts.fireYear ?? null,
+      fireAge: opts.fireAge ?? null,
+      daysToFire: opts.targetHit ? 2920 : null,
+      workingDaysToFire: opts.targetHit ? 2320 : null,
+      currentPortfolioValue: 200_000,
+      annualContribution: 24_000,
+      realGrowthRate: 0.045,
+      targetValue: 1_000_000,
+      targetHitInWindow: opts.targetHit,
+    };
+  }
+
+  it("includes the header and key metrics", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("FIRE Growth Projection");
+    expect(summary).toContain("Starting Portfolio: £200K");
+    expect(summary).toContain("FIRE Target: £1.0M");
+    expect(summary).toContain("4.5%");
+    expect(summary).toContain("7% growth");
+    expect(summary).toContain("2.5% inflation");
+  });
+
+  it("includes annual contributions", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("Annual Contributions: £24K/yr");
+  });
+
+  it("includes sample year calculation illustration", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("How it works:");
+    expect(summary).toContain("2025");
+    expect(summary).toContain("growth");
+  });
+
+  it("includes projected FIRE year when target is hit", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("Projected FIRE: 2033");
+    expect(summary).toContain("age 43");
+  });
+
+  it("shows warning when target is not hit", () => {
+    const projection = makeProjection({ targetHit: false });
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("Target not reached");
+  });
+
+  it("shows 'none' for contributions when annual contribution is zero", () => {
+    const projection = makeProjection({ targetHit: false });
+    projection.annualContribution = 0;
+    const summary = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summary).toContain("Annual Contributions: none");
+  });
+
+  it("uses the correct currency symbol", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summaryGBP = buildGrowthChartSummary(projection, testSettings, "GBP");
+    expect(summaryGBP).toContain("£");
+
+    const summaryUSD = buildGrowthChartSummary(projection, testSettings, "USD");
+    expect(summaryUSD).toContain("$");
+  });
+});
+
+// ──────────────────────────────────────────
+// buildSplitChartSummary
+// ──────────────────────────────────────────
+
+describe("buildSplitChartSummary", () => {
+  const testSettings: FireSettings = {
+    targetValue: 1_000_000,
+    withdrawalRate: 4,
+    annualInflation: 2.5,
+    annualGrowthRate: 7,
+    yearOfBirth: 1990,
+    holidayEntitlement: 25,
+    sippAccessAge: 57,
+    excludedAccountIds: [],
+    contributions: [],
+    updatedAt: "2025-01-15T00:00:00.000Z",
+  };
+
+  const testSplitData: SplitPortfolioData = {
+    accessibleValue: 150_000,
+    lockedValue: 50_000,
+    accessibleAnnualContribution: 18_000,
+    lockedAnnualContribution: 6_000,
+  };
+
+  function makeProjection(opts: { targetHit: boolean; fireYear?: number; fireAge?: number }): FireProjection {
+    const years: FireProjectionYear[] = [];
+    for (let i = 0; i < 10; i++) {
+      years.push({
+        year: 2025 + i,
+        age: 35 + i,
+        portfolioValue: 200_000 + i * 100_000,
+        isTargetHit: opts.targetHit && 200_000 + i * 100_000 >= 1_000_000,
+        isSippAccessible: false,
+      });
+    }
+
+    return {
+      years,
+      fireYear: opts.fireYear ?? null,
+      fireAge: opts.fireAge ?? null,
+      daysToFire: opts.targetHit ? 2920 : null,
+      workingDaysToFire: opts.targetHit ? 2320 : null,
+      currentPortfolioValue: 200_000,
+      annualContribution: 24_000,
+      realGrowthRate: 0.045,
+      targetValue: 1_000_000,
+      targetHitInWindow: opts.targetHit,
+    };
+  }
+
+  it("includes the header", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("Accessible vs Locked Split");
+  });
+
+  it("shows accessible and locked starting values", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("Accessible (ISA/GIA): £150K");
+    expect(summary).toContain("Locked (SIPP/401K): £50K");
+  });
+
+  it("shows contribution split", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("£18K/yr accessible");
+    expect(summary).toContain("£6K/yr locked");
+  });
+
+  it("includes pension access age and year", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("Pension Access: age 57 (2047)");
+  });
+
+  it("includes a sample midpoint year", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("Example (");
+    expect(summary).toContain("accessible");
+    expect(summary).toContain("locked");
+  });
+
+  it("shows FIRE year when target is hit", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).toContain("FIRE target reached: 2033");
+    expect(summary).toContain("age 43");
+  });
+
+  it("does not show FIRE year when target is not hit", () => {
+    const projection = makeProjection({ targetHit: false });
+    const summary = buildSplitChartSummary(projection, testSettings, testSplitData, "GBP");
+    expect(summary).not.toContain("FIRE target reached");
   });
 });

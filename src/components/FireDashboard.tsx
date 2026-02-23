@@ -45,13 +45,18 @@ import {
   useNavigation,
   confirmAlert,
   environment,
+  open,
+  showToast,
+  Toast,
+  showHUD,
 } from "@raycast/api";
 import { Portfolio, PortfolioValuation, isLockedAccountType } from "../utils/types";
 import { FireSettings, FireContribution, FireProjection } from "../utils/fire-types";
 import { calculateProjection, totalAnnualContribution } from "../services/fire-calculator";
-import { buildDashboardMarkdown, SplitPortfolioData } from "../utils/fire-charts";
+import { buildDashboardMarkdown, SplitPortfolioData, DashboardMarkdownResult } from "../utils/fire-charts";
 import { getDisplayName } from "../utils/formatting";
 import { formatCurrency } from "../utils/formatting";
+import { writeSvgToTempFile, saveSvgToDownloads } from "../utils/fire-chart-export";
 import { FireSetup } from "./FireSetup";
 import { FireContributions } from "./FireContributions";
 
@@ -199,13 +204,37 @@ export function FireDashboard({
     });
   }, [settings.contributions, accounts]);
 
-  // ── Build markdown ──
+  // ── Build markdown + raw SVGs ──
 
   const theme = environment.appearance === "light" ? "light" : "dark";
 
-  const markdown = useMemo(() => {
+  const dashboardData: DashboardMarkdownResult = useMemo(() => {
     return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions, theme, splitData);
   }, [projection, settings, baseCurrency, resolvedContributions, theme, splitData]);
+
+  const { markdown, growthSvg, splitSvg } = dashboardData;
+
+  // ── Chart Action Handlers ──
+
+  async function handleOpenChart(svg: string, filename: string): Promise<void> {
+    try {
+      const filePath = await writeSvgToTempFile(svg, filename);
+      await open(filePath);
+    } catch (error) {
+      console.error("Failed to open chart:", error);
+      await showToast({ style: Toast.Style.Failure, title: "Failed to open chart" });
+    }
+  }
+
+  async function handleDownloadChart(svg: string, filename: string): Promise<void> {
+    try {
+      await saveSvgToDownloads(svg, filename);
+      await showHUD(`Saved ${filename} to Downloads`);
+    } catch (error) {
+      console.error("Failed to save chart:", error);
+      await showToast({ style: Toast.Style.Failure, title: "Failed to save chart" });
+    }
+  }
 
   // ── Navigation Handlers ──
 
@@ -404,6 +433,44 @@ export function FireDashboard({
               onAction={handleResetSettings}
             />
           </ActionPanel.Section>
+
+          {/* ── Chart Actions ── */}
+          {(growthSvg || splitSvg) && (
+            <ActionPanel.Section title="Charts">
+              {growthSvg && (
+                <Action
+                  title="Open Growth Chart"
+                  icon={Icon.Maximize}
+                  shortcut={{ modifiers: ["cmd"], key: "o" }}
+                  onAction={() => handleOpenChart(growthSvg, "fire-growth-projection.svg")}
+                />
+              )}
+              {splitSvg && (
+                <Action
+                  title="Open Split Chart"
+                  icon={Icon.Maximize}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "o" }}
+                  onAction={() => handleOpenChart(splitSvg, "fire-split-projection.svg")}
+                />
+              )}
+              {growthSvg && (
+                <Action
+                  title="Save Growth Chart"
+                  icon={Icon.Download}
+                  shortcut={{ modifiers: ["cmd"], key: "s" }}
+                  onAction={() => handleDownloadChart(growthSvg, "FIRE-Growth-Projection.svg")}
+                />
+              )}
+              {splitSvg && (
+                <Action
+                  title="Save Split Chart"
+                  icon={Icon.Download}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+                  onAction={() => handleDownloadChart(splitSvg, "FIRE-Split-Projection.svg")}
+                />
+              )}
+            </ActionPanel.Section>
+          )}
         </ActionPanel>
       }
     />

@@ -93,6 +93,15 @@ export interface SplitChartConfig {
 
   /** Optional chart title displayed above the chart area */
   title?: string;
+
+  /**
+   * Optional tooltip text embedded as an SVG `<title>` element.
+   *
+   * When the SVG is opened in a browser (via the "Open Chart" action),
+   * hovering over the chart displays this text as a native tooltip.
+   * Has no effect inside Raycast's `<img>`-rendered Detail markdown.
+   */
+  tooltip?: string;
 }
 
 // ──────────────────────────────────────────
@@ -295,6 +304,13 @@ export function buildSplitProjectionSVG(bars: SplitChartBar[], config: SplitChar
   // ── 0. Theme CSS ──
 
   elements.push(buildSplitStyleBlock());
+
+  // ── 0b. Tooltip (SVG <title> — shows on hover in browsers) ──
+
+  if (config.tooltip) {
+    const escaped = config.tooltip.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    elements.push(`<title>${escaped}</title>`);
+  }
 
   // ── 1. Background ──
 
