@@ -49,6 +49,18 @@ export enum AccountType {
   OTHER = "OTHER",
 }
 
+/**
+ * Returns true if the account type is locked until a pension access age
+ * (e.g. SIPP in the UK, 401K in the US). Locked accounts are not
+ * accessible for withdrawal until the holder reaches the specified age.
+ *
+ * All other account types (ISA, GIA, LISA, Brokerage, etc.) are
+ * considered immediately accessible.
+ */
+export function isLockedAccountType(type: AccountType): boolean {
+  return type === AccountType.SIPP || type === AccountType._401K;
+}
+
 /** Asset type as returned by Yahoo Finance (plus CASH for cash holdings) */
 export enum AssetType {
   EQUITY = "EQUITY",

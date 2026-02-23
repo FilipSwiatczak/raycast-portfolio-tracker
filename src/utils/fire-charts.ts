@@ -9,22 +9,29 @@
  *   - Status message with FIRE year or warning
  *   - Progress bar showing current vs target portfolio value
  *   - SVG stacked bar chart of the year-by-year projection (colour-coded
- *     portfolio growth vs contribution impact)
+ *     base growth vs contribution impact)
+ *   - SVG split chart showing accessible vs locked account breakdown
  *   - Compact contributions summary (emoji + bullet list, not a table)
  *   - Assumptions footer line
  *
- * The projection chart is rendered as an inline SVG image via a base64
- * data URI, which gives us full colour control inside Raycast's Detail
- * markdown. Each bar is split into two segments:
- *   - Portfolio Growth (white/dark) — compound growth on existing holdings
+ * The projection charts are rendered as inline SVG images via base64
+ * data URIs, which gives us full colour control inside Raycast's Detail
+ * markdown. The growth chart splits each bar into two segments:
+ *   - Base (white/dark) — compound growth on existing holdings
  *   - Contribution Impact (blue) — cumulative contributions + their growth
  *
- * A vertical dashed target line and green FIRE-year highlight complete
- * the visualisation.
+ * The split chart shows:
+ *   - Accessible (green) — ISA/GIA/Brokerage etc. (withdrawable any time)
+ *   - Locked (amber) — SIPP/401K (locked until pension access age)
+ *   - Unlocked (light green) — locked funds after pension access age
+ *
+ * Vertical dashed target lines and green FIRE-year highlights complete
+ * the visualisations.
  */
 
 import { FireProjection, FireProjectionYear, FireSettings, FireContribution } from "./fire-types";
 import { buildProjectionSVG, ChartBar, ChartConfig } from "./fire-svg";
+import { buildSplitProjectionSVG, SplitChartBar, SplitChartConfig } from "./fire-svg-split";
 
 // ──────────────────────────────────────────
 // Configuration
@@ -46,25 +53,49 @@ const CHAR_EMPTY = "░";
 const CHAR_TARGET = "│";
 
 // ──────────────────────────────────────────
+// Split Portfolio Data
+// ──────────────────────────────────────────
+
+/**
+ * Pre-computed split of the portfolio into accessible and locked portions.
+ *
+ * Passed by the component after classifying accounts by type.
+ * When `lockedValue > 0 || lockedAnnualContribution > 0`, the dashboard
+ * renders a second SVG chart showing the accessible vs locked breakdown.
+ */
+export interface SplitPortfolioData {
+  /** Current value in accessible accounts (ISA/GIA/LISA/Brokerage etc.) */
+  accessibleValue: number;
+  /** Current value in locked accounts (SIPP/401K) */
+  lockedValue: number;
+  /** Annual contribution to accessible accounts */
+  accessibleAnnualContribution: number;
+  /** Annual contribution to locked accounts */
+  lockedAnnualContribution: number;
+}
+
+// ──────────────────────────────────────────
 // Main Dashboard Builder
 // ──────────────────────────────────────────
 
 /**
- * Builds the complete markdown content for the FIRE dashboard Detail view.
+ * Builds the full FIRE dashboard markdown string.
  *
- * Layout:
- *   1. Header + status blockquote
- *   2. Progress bar (current → target)
- *   3. Portfolio Projection SVG chart (stacked: growth + contributions)
- *   4. Separator
- *   5. Contributions summary (emoji list) or hint to add
- *   6. Assumptions footer
+ * Layout (top to bottom):
+ *   1. Dashboard header
+ *   2. Status message (on-track / warning)
+ *   3. Progress bar (current vs target)
+ *   4. Growth projection SVG chart (base growth + contributions)
+ *   5. Accessible vs Locked SVG chart (if locked accounts exist)
+ *   6. Contributions summary (emoji list) or hint to add
+ *   7. Assumptions footer
  *
  * @param projection     - The computed FIRE projection
  * @param settings       - Current FIRE settings (for display context)
  * @param baseCurrency   - User's base currency code (e.g. "GBP")
  * @param contributions  - Resolved contribution list with display names
  * @param theme          - Raycast appearance ("light" | "dark") for SVG colours
+ * @param splitData      - Optional accessible/locked portfolio breakdown
  * @returns Markdown string ready for Raycast's Detail view
  */
 export function buildDashboardMarkdown(
@@ -73,6 +104,7 @@ export function buildDashboardMarkdown(
   baseCurrency: string,
   contributions: Array<FireContribution & { displayName: string; accountName: string }>,
   theme: "light" | "dark" = "dark",
+  splitData?: SplitPortfolioData,
 ): string {
   const lines: string[] = [];
 
@@ -108,6 +140,7 @@ export function buildDashboardMarkdown(
     targetValue: projection.targetValue,
     targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
     theme,
+    title: "Growth with contributions",
   };
   const svg = buildProjectionSVG(chartBars, chartConfig);
 
@@ -119,6 +152,31 @@ export function buildDashboardMarkdown(
     lines.push(buildProjectionChart(projection.years, projection.targetValue, baseCurrency, projection.fireYear));
   }
   lines.push("");
+
+  // ── Split Chart: Accessible vs Locked (SVG) ──
+  if (splitData && (splitData.lockedValue > 0 || splitData.lockedAnnualContribution > 0)) {
+    const splitBars = computeSplitChartBars(projection, splitData, settings, baseCurrency);
+    if (splitBars.length > 0) {
+      const sippAccessYear = settings.yearOfBirth + settings.sippAccessAge;
+      const splitConfig: SplitChartConfig = {
+        targetValue: projection.targetValue,
+        targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
+        sippAccessYear:
+          sippAccessYear >= projection.years[0].year &&
+          sippAccessYear <= projection.years[projection.years.length - 1].year
+            ? sippAccessYear
+            : null,
+        theme,
+        title: "Accessible vs Locked",
+      };
+      const splitSvg = buildSplitProjectionSVG(splitBars, splitConfig);
+      if (splitSvg) {
+        const splitB64 = Buffer.from(splitSvg).toString("base64");
+        lines.push(`![Split Projection](data:image/svg+xml;base64,${splitB64})`);
+        lines.push("");
+      }
+    }
+  }
 
   // ── Footer ──
   lines.push("---");
@@ -153,6 +211,9 @@ export function buildDashboardMarkdown(
  * Base growth series: `bg[0] = initial`, `bg[n] = bg[n-1] × (1 + realRate)`
  * Contribution component: `cc[n] = total[n] − bg[n]`
  *
+ * Each bar also includes pre-formatted labels for inline display on the
+ * bar segments.
+ *
  * @param projection   - Full FIRE projection result
  * @param baseCurrency - Currency code for label formatting
  * @returns Array of ChartBar objects ready for the SVG builder
@@ -182,6 +243,82 @@ export function computeChartBars(projection: FireProjection, baseCurrency: strin
       totalValue: yearData.portfolioValue,
       baseGrowthValue,
       contributionValue,
+      isFireYear,
+      baseLabel: formatCompactValue(baseGrowthValue, baseCurrency),
+      contribLabel: contributionValue > 0 ? formatCompactValue(contributionValue, baseCurrency) : undefined,
+    };
+  });
+}
+
+// ──────────────────────────────────────────
+// Split Chart Data Decomposition
+// ──────────────────────────────────────────
+
+/**
+ * Decomposes the projection into accessible vs locked chart bars.
+ *
+ * Projects accessible and locked portions independently using the same
+ * real growth rate but separate starting values and contributions.
+ * The sum `accessible[n] + locked[n]` equals the total projection for
+ * each year (both portions grow at the same rate).
+ *
+ * After the FIRE year, contributions stop for both portions (matching
+ * the main projection engine behaviour).
+ *
+ * @param projection   - Full FIRE projection result
+ * @param splitData    - Accessible/locked starting values and contributions
+ * @param settings     - FIRE settings (for sippAccessAge, yearOfBirth)
+ * @param baseCurrency - Currency code for label formatting
+ * @returns Array of SplitChartBar objects ready for the split SVG builder
+ */
+export function computeSplitChartBars(
+  projection: FireProjection,
+  splitData: SplitPortfolioData,
+  settings: FireSettings,
+  baseCurrency: string,
+): SplitChartBar[] {
+  const { years, realGrowthRate, fireYear } = projection;
+  if (years.length === 0) return [];
+
+  const sippAccessYear = settings.yearOfBirth + settings.sippAccessAge;
+
+  // Build separate growth series for accessible and locked
+  const accessibleSeries: number[] = [splitData.accessibleValue];
+  const lockedSeries: number[] = [splitData.lockedValue];
+
+  for (let i = 1; i < years.length; i++) {
+    const yearNum = years[i].year;
+
+    // Stop contributions after the FIRE year (matching main projection)
+    const preFire = fireYear === null || yearNum <= fireYear;
+    const accContrib = preFire ? splitData.accessibleAnnualContribution : 0;
+    const lockContrib = preFire ? splitData.lockedAnnualContribution : 0;
+
+    // Same half-year contribution approximation as the main calculator
+    accessibleSeries.push(accessibleSeries[i - 1] * (1 + realGrowthRate) + accContrib * (1 + realGrowthRate / 2));
+    lockedSeries.push(lockedSeries[i - 1] * (1 + realGrowthRate) + lockContrib * (1 + realGrowthRate / 2));
+  }
+
+  // Track first target hit for the isFireYear flag
+  let prevTargetHit = false;
+
+  return years.map((yearData, i) => {
+    const accessibleValue = accessibleSeries[i];
+    const lockedValue = lockedSeries[i];
+    const totalValue = accessibleValue + lockedValue;
+    const isSippAccessible = yearData.year >= sippAccessYear;
+    const isFireYear = yearData.isTargetHit && !prevTargetHit;
+    prevTargetHit = yearData.isTargetHit;
+
+    return {
+      year: yearData.year,
+      label: formatCompactValue(totalValue, baseCurrency),
+      accessibleValue,
+      lockedValue,
+      totalValue,
+      accessibleLabel: formatCompactValue(accessibleValue, baseCurrency),
+      lockedLabel: lockedValue > 0 ? formatCompactValue(lockedValue, baseCurrency) : "",
+      isSippAccessible,
       isFireYear,
     };
   });
@@ -283,17 +420,18 @@ export function buildContributionsSummary(
 // ──────────────────────────────────────────
 
 /**
- * Builds a horizontal ASCII bar chart from projection data.
+ * Builds an ASCII horizontal bar chart for the projection.
  *
- * Kept as a fallback in case SVG rendering fails. Uses a monospace code
- * block for alignment. Each row shows:
- *   YEAR  [bar with target marker]  VALUE  [optional FIRE marker]
+ * This is the fallback renderer when the SVG builder returns empty
+ * (e.g. no data). The SVG chart is preferred for all normal cases.
  *
- * @param years        - Projection year data points
- * @param targetValue  - The FIRE target value (for the marker position)
- * @param baseCurrency - Currency code for value labels
- * @param fireYear     - The year FIRE is achieved (null if not within window)
- * @returns Markdown string containing the chart in a code block
+ * Renders inside a code block for monospace alignment.
+ *
+ * @param years        - Projection timeline
+ * @param targetValue  - FIRE target value (for the marker)
+ * @param baseCurrency - Currency code for labels
+ * @param fireYear     - The FIRE year (for the 🎯 marker), or null
+ * @returns Markdown code block string
  */
 export function buildProjectionChart(
   years: FireProjectionYear[],
@@ -301,13 +439,13 @@ export function buildProjectionChart(
   baseCurrency: string,
   fireYear: number | null,
 ): string {
-  if (years.length === 0) return "*No projection data*";
+  if (years.length === 0) return "*No projection data available.*";
 
-  // Find the scale ceiling: max of all values and target
+  // Max value for scaling
   const maxValue = Math.max(...years.map((y) => y.portfolioValue), targetValue);
-  if (maxValue <= 0) return "*No projection data*";
+  if (maxValue <= 0) return "*No projection data available.*";
 
-  // Target position in the bar (as character index)
+  // Target position as a character index
   const targetPos = Math.round((targetValue / maxValue) * BAR_WIDTH);
 
   const lines: string[] = [];
@@ -315,66 +453,47 @@ export function buildProjectionChart(
 
   let prevTargetHit = false;
 
-  for (const yearData of years) {
-    const { year, portfolioValue, isTargetHit } = yearData;
-
-    // Bar width proportional to value
+  for (const { year, portfolioValue, isTargetHit } of years) {
+    // Calculate filled width
     const filledWidth = Math.round((portfolioValue / maxValue) * BAR_WIDTH);
 
-    // Build the bar with target marker
-    const bar = buildBar(filledWidth, BAR_WIDTH, targetPos);
+    // Build the bar with optional target marker
+    const bar = buildBar(BAR_WIDTH, filledWidth, targetPos);
 
-    // Value label
+    // Format value label
     const valueLabel = formatCompactValue(portfolioValue, baseCurrency);
-    const paddedValue = valueLabel.padStart(8);
+    const paddedValue = valueLabel.padStart(7);
 
-    // FIRE marker on the first year that hits the target
+    // Mark the FIRE year (first year target is hit)
     const isFireYear = isTargetHit && !prevTargetHit;
-    const marker = isFireYear ? "  🎯 FIRE!" : "";
-
-    lines.push(`${year}  ${bar} ${paddedValue}${marker}`);
-
+    const marker = isFireYear ? " 🎯" : "";
     prevTargetHit = isTargetHit;
+
+    lines.push(`${year} ${bar} ${paddedValue}${marker}`);
   }
+
+  // Legend line
+  const targetLabel = formatCompactValue(targetValue, baseCurrency);
+  const fireInfo = fireYear ? `FIRE ${fireYear}` : "not yet reached";
+  lines.push(`     ${"─".repeat(BAR_WIDTH)}  ${targetLabel} target · ${fireInfo}`);
 
   lines.push("```");
-
-  // Legend
-  if (fireYear !== null) {
-    lines.push(`\n*${CHAR_TARGET} = ${formatCompactValue(targetValue, baseCurrency)} target*`);
-  } else {
-    lines.push(`\n*${CHAR_TARGET} = ${formatCompactValue(targetValue, baseCurrency)} target (not yet reached)*`);
-  }
 
   return lines.join("\n");
 }
 
-// ──────────────────────────────────────────
-// Bar Construction
-// ──────────────────────────────────────────
-
 /**
- * Builds a single ASCII bar string with a target marker.
+ * Builds a single bar string with optional target marker.
  *
- * The bar has three visual zones:
- *   1. Filled portion (█) — represents current value
- *   2. Empty portion (░) — remaining space
- *   3. Target marker (│) — overlaid at the target position
- *
- * If the filled portion extends past the target, the marker is hidden
- * (absorbed into the filled block).
- *
+ * @param totalWidth  - Total character width of the bar
  * @param filledWidth - Number of filled characters
- * @param totalWidth  - Total bar width
- * @param targetPos   - Character position of the target marker (0-indexed)
- * @returns The assembled bar string
+ * @param targetPos   - Character position for the target marker
+ * @returns Formatted bar string
  */
-export function buildBar(filledWidth: number, totalWidth: number, targetPos: number): string {
+export function buildBar(totalWidth: number, filledWidth: number, targetPos: number): string {
   const chars: string[] = [];
-
   for (let i = 0; i < totalWidth; i++) {
-    if (i === targetPos && filledWidth <= targetPos) {
-      // Show target marker only if we haven't filled past it
+    if (i === targetPos && i >= filledWidth) {
       chars.push(CHAR_TARGET);
     } else if (i < filledWidth) {
       chars.push(CHAR_FILLED);
@@ -382,7 +501,6 @@ export function buildBar(filledWidth: number, totalWidth: number, targetPos: num
       chars.push(CHAR_EMPTY);
     }
   }
-
   return chars.join("");
 }
 

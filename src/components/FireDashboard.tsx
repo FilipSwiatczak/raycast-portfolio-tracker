@@ -46,10 +46,10 @@ import {
   confirmAlert,
   environment,
 } from "@raycast/api";
-import { Portfolio, PortfolioValuation } from "../utils/types";
+import { Portfolio, PortfolioValuation, isLockedAccountType } from "../utils/types";
 import { FireSettings, FireContribution, FireProjection } from "../utils/fire-types";
 import { calculateProjection, totalAnnualContribution } from "../services/fire-calculator";
-import { buildDashboardMarkdown } from "../utils/fire-charts";
+import { buildDashboardMarkdown, SplitPortfolioData } from "../utils/fire-charts";
 import { getDisplayName } from "../utils/formatting";
 import { formatCurrency } from "../utils/formatting";
 import { FireSetup } from "./FireSetup";
@@ -136,6 +136,42 @@ export function FireDashboard({
 
   const annualContrib = useMemo(() => totalAnnualContribution(settings.contributions), [settings.contributions]);
 
+  // ── Compute accessible vs locked portfolio split ──
+
+  const splitData: SplitPortfolioData | undefined = useMemo(() => {
+    if (!valuation) return undefined;
+
+    const includedAccountValuations = valuation.accounts.filter(
+      (av) => !settings.excludedAccountIds.includes(av.account.id),
+    );
+
+    const lockedValue = includedAccountValuations
+      .filter((av) => isLockedAccountType(av.account.type))
+      .reduce((sum, av) => sum + av.totalBaseValue, 0);
+
+    const accessibleValue = includedPortfolioValue - lockedValue;
+
+    // Split contributions by account type
+    const lockedAnnualContribution = settings.contributions
+      .filter((c) => {
+        const account = accounts.find((a) => a.id === c.accountId);
+        return account && isLockedAccountType(account.type) && c.monthlyAmount > 0;
+      })
+      .reduce((sum, c) => sum + c.monthlyAmount * 12, 0);
+
+    const accessibleAnnualContribution = annualContrib - lockedAnnualContribution;
+
+    // Only return split data if there are actually locked accounts/contributions
+    if (lockedValue <= 0 && lockedAnnualContribution <= 0) return undefined;
+
+    return {
+      accessibleValue,
+      lockedValue,
+      accessibleAnnualContribution,
+      lockedAnnualContribution,
+    };
+  }, [valuation, settings.excludedAccountIds, settings.contributions, accounts, includedPortfolioValue, annualContrib]);
+
   const projection: FireProjection = useMemo(() => {
     return calculateProjection({
       currentPortfolioValue: includedPortfolioValue,
@@ -168,8 +204,8 @@ export function FireDashboard({
   const theme = environment.appearance === "light" ? "light" : "dark";
 
   const markdown = useMemo(() => {
-    return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions, theme);
-  }, [projection, settings, baseCurrency, resolvedContributions, theme]);
+    return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions, theme, splitData);
+  }, [projection, settings, baseCurrency, resolvedContributions, theme, splitData]);
 
   // ── Navigation Handlers ──
 

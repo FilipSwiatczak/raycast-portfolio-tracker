@@ -4,7 +4,7 @@
  * Generates a stacked horizontal bar chart as an SVG string with two
  * colour-coded data series per year:
  *
- *   - **Portfolio Growth** (white/dark) — compound growth on existing holdings
+ *   - **Base** (white/dark) — compound growth on existing holdings
  *     assuming zero contributions.
  *   - **Contribution Impact** (blue) — cumulative value of all contributions
  *     plus the compound growth earned on those contributions.
@@ -13,10 +13,12 @@
  * the right, so each bar's total width represents the full projected value.
  *
  * Additional visual elements:
+ *   - Optional chart title/caption
+ *   - Inline value labels on each bar segment (when wide enough)
  *   - Vertical dashed target line at the FIRE target value
  *   - Green highlight row for the FIRE year
  *   - Legend at the bottom
- *   - Year labels (left), value labels (right)
+ *   - Year labels (left), total value labels (right)
  *
  * Colour handling:
  *   All colours are stored as `{ hex, opacity }` pairs and emitted using
@@ -57,7 +59,7 @@ export interface ChartBar {
   /** Calendar year (e.g. 2025) */
   year: number;
 
-  /** Pre-formatted value label for the right side (e.g. "£420K") */
+  /** Pre-formatted total value label for the right side (e.g. "£420K") */
   label: string;
 
   /**
@@ -80,6 +82,12 @@ export interface ChartBar {
 
   /** True only for the first year the target is hit */
   isFireYear: boolean;
+
+  /** Pre-formatted base growth segment label (e.g. "£200K"). Optional. */
+  baseLabel?: string;
+
+  /** Pre-formatted contribution segment label (e.g. "£50K"). Optional. */
+  contribLabel?: string;
 }
 
 /** Configuration passed alongside the bar data. */
@@ -96,10 +104,13 @@ export interface ChartConfig {
    * rules override these when the renderer supports them (Raycast does).
    */
   theme: "light" | "dark";
+
+  /** Optional chart title displayed above the chart area */
+  title?: string;
 }
 
 // ──────────────────────────────────────────
-// SVG Colour Type
+// SVG Colour Type (exported for split chart)
 // ──────────────────────────────────────────
 
 /**
@@ -110,7 +121,7 @@ export interface ChartConfig {
  * must be expressed via the companion `fill-opacity` / `stroke-opacity`
  * attribute. This type enforces that separation at the data level.
  */
-interface SvgColor {
+export interface SvgColor {
   /** Hex colour string, e.g. "#FFFFFF" */
   hex: string;
   /** Opacity 0–1 (1 = fully opaque) */
@@ -142,10 +153,14 @@ interface ThemePalette {
   mutedText: SvgColor;
   /** Legend label text */
   legendText: SvgColor;
+  /** Contrasting text drawn on top of base growth bars */
+  baseBarLabel: SvgColor;
+  /** Contrasting text drawn on top of contribution bars */
+  contribBarLabel: SvgColor;
 }
 
 /** Shorthand: fully opaque colour */
-function solid(hex: string): SvgColor {
+export function solid(hex: string): SvgColor {
   return { hex, opacity: 1 };
 }
 
@@ -161,6 +176,8 @@ const PALETTES: Record<"light" | "dark", ThemePalette> = {
     text: { hex: "#FFFFFF", opacity: 0.82 },
     mutedText: { hex: "#FFFFFF", opacity: 0.45 },
     legendText: { hex: "#FFFFFF", opacity: 0.6 },
+    baseBarLabel: { hex: "#000000", opacity: 0.6 },
+    contribBarLabel: { hex: "#FFFFFF", opacity: 0.9 },
   },
   light: {
     background: solid("#FFFFFF"),
@@ -173,11 +190,13 @@ const PALETTES: Record<"light" | "dark", ThemePalette> = {
     text: { hex: "#000000", opacity: 0.82 },
     mutedText: { hex: "#000000", opacity: 0.45 },
     legendText: { hex: "#000000", opacity: 0.6 },
+    baseBarLabel: { hex: "#FFFFFF", opacity: 0.9 },
+    contribBarLabel: { hex: "#FFFFFF", opacity: 0.9 },
   },
 };
 
 // ──────────────────────────────────────────
-// SVG Attribute Helpers
+// SVG Attribute Helpers (exported for split chart)
 // ──────────────────────────────────────────
 
 /**
@@ -190,7 +209,7 @@ const PALETTES: Record<"light" | "dark", ThemePalette> = {
  *   fillAttr({ hex: "#1C1C1E", opacity: 1 })
  *   // → 'fill="#1C1C1E"'
  */
-function fillAttr(c: SvgColor): string {
+export function fillAttr(c: SvgColor): string {
   if (c.opacity < 1) {
     return `fill="${c.hex}" fill-opacity="${c.opacity}"`;
   }
@@ -200,7 +219,7 @@ function fillAttr(c: SvgColor): string {
 /**
  * Emits SVG `stroke` + optional `stroke-opacity` presentation attributes.
  */
-function strokeAttr(c: SvgColor): string {
+export function strokeAttr(c: SvgColor): string {
   if (c.opacity < 1) {
     return `stroke="${c.hex}" stroke-opacity="${c.opacity}"`;
   }
@@ -214,7 +233,7 @@ function strokeAttr(c: SvgColor): string {
  *   cssFillRule({ hex: "#FFF", opacity: 0.75 })
  *   // → 'fill: #FFF; fill-opacity: 0.75;'
  */
-function cssFillRule(c: SvgColor): string {
+export function cssFillRule(c: SvgColor): string {
   if (c.opacity < 1) {
     return `fill: ${c.hex}; fill-opacity: ${c.opacity};`;
   }
@@ -224,7 +243,7 @@ function cssFillRule(c: SvgColor): string {
 /**
  * Emits a CSS `stroke` + optional `stroke-opacity` rule body.
  */
-function cssStrokeRule(c: SvgColor): string {
+export function cssStrokeRule(c: SvgColor): string {
   if (c.opacity < 1) {
     return `stroke: ${c.hex}; stroke-opacity: ${c.opacity};`;
   }
@@ -254,47 +273,58 @@ const CLS = {
   text: "c-text",
   muted: "c-muted",
   legend: "c-legend",
+  baseLbl: "c-base-lbl",
+  contribLbl: "c-contrib-lbl",
 } as const;
 
 // ──────────────────────────────────────────
-// Layout Constants
+// Layout Constants (exported for split chart)
 // ──────────────────────────────────────────
 
 /** Total SVG width in px */
-const SVG_WIDTH = 700;
+export const SVG_WIDTH = 700;
 
-/** Padding around the chart area */
-const PADDING = { top: 8, right: 82, bottom: 38, left: 50 };
+/** Default padding around the chart area (no title) */
+const PADDING_BASE = { top: 8, right: 82, bottom: 38, left: 50 };
+
+/** Extra top padding when a title is present */
+const TITLE_EXTRA_TOP = 20;
 
 /** Height of each horizontal bar */
-const BAR_HEIGHT = 18;
+export const BAR_HEIGHT = 18;
 
 /** Vertical gap between bars */
-const BAR_GAP = 3;
+export const BAR_GAP = 3;
 
 /** Combined row height (bar + gap) */
-const ROW_HEIGHT = BAR_HEIGHT + BAR_GAP;
-
-/** Usable width for the bar graphics */
-const BAR_AREA_WIDTH = SVG_WIDTH - PADDING.left - PADDING.right;
+export const ROW_HEIGHT = BAR_HEIGHT + BAR_GAP;
 
 /** Font used for all text labels */
-const FONT_FAMILY = "-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif";
+export const FONT_FAMILY = "-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif";
 
 /** Font size for year and value labels */
-const FONT_SIZE_LABEL = 12;
+export const FONT_SIZE_LABEL = 12;
 
 /** Font size for legend text */
-const FONT_SIZE_LEGEND = 11;
+export const FONT_SIZE_LEGEND = 11;
+
+/** Font size for the chart title */
+const FONT_SIZE_TITLE = 13;
+
+/** Font size for inline bar value labels */
+const FONT_SIZE_BAR_LABEL = 9;
+
+/** Minimum bar segment width (px) to render an inline value label */
+const MIN_LABEL_WIDTH = 32;
 
 /** Height reserved for the legend row */
-const LEGEND_HEIGHT = 24;
+export const LEGEND_HEIGHT = 24;
 
 /** Horizontal gap between legend items */
-const LEGEND_ITEM_GAP = 16;
+export const LEGEND_ITEM_GAP = 16;
 
 /** Size of the legend colour swatch square */
-const LEGEND_SWATCH = 10;
+export const LEGEND_SWATCH = 10;
 
 // ──────────────────────────────────────────
 // CSS Builder
@@ -328,6 +358,8 @@ function buildThemeStyleBlock(): string {
     `.${CLS.text} { ${cssFillRule(light.text)} }`,
     `.${CLS.muted} { ${cssFillRule(light.mutedText)} }`,
     `.${CLS.legend} { ${cssFillRule(light.legendText)} }`,
+    `.${CLS.baseLbl} { ${cssFillRule(light.baseBarLabel)} }`,
+    `.${CLS.contribLbl} { ${cssFillRule(light.contribBarLabel)} }`,
   ];
 
   const darkRules = [
@@ -341,6 +373,8 @@ function buildThemeStyleBlock(): string {
     `.${CLS.text} { ${cssFillRule(dark.text)} }`,
     `.${CLS.muted} { ${cssFillRule(dark.mutedText)} }`,
     `.${CLS.legend} { ${cssFillRule(dark.legendText)} }`,
+    `.${CLS.baseLbl} { ${cssFillRule(dark.baseBarLabel)} }`,
+    `.${CLS.contribLbl} { ${cssFillRule(dark.contribBarLabel)} }`,
   ];
 
   return [
@@ -365,7 +399,7 @@ function buildThemeStyleBlock(): string {
  * Builds a stacked horizontal bar chart SVG for the FIRE projection.
  *
  * @param bars   - Pre-computed chart data, one entry per projection year
- * @param config - Target value, label, and theme
+ * @param config - Target value, label, theme, and optional title
  * @returns Complete SVG document as a string, or empty string if no data
  *
  * @example
@@ -373,6 +407,7 @@ function buildThemeStyleBlock(): string {
  *   targetValue: 1_000_000,
  *   targetLabel: "£1.0M",
  *   theme: "dark",
+ *   title: "Growth with contributions",
  * });
  * const b64 = Buffer.from(svg).toString("base64");
  * const md = `![Projection](data:image/svg+xml;base64,${b64})`;
@@ -380,24 +415,31 @@ function buildThemeStyleBlock(): string {
 export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): string {
   if (bars.length === 0) return "";
 
-  const { targetValue, targetLabel, theme } = config;
+  const { targetValue, targetLabel, theme, title } = config;
   const palette = PALETTES[theme];
 
   // ── Dimensions ──
 
+  const hasTitle = !!title;
+  const padTop = PADDING_BASE.top + (hasTitle ? TITLE_EXTRA_TOP : 0);
+  const padRight = PADDING_BASE.right;
+  const padBottom = PADDING_BASE.bottom;
+  const padLeft = PADDING_BASE.left;
+  const barAreaWidth = SVG_WIDTH - padLeft - padRight;
+
   const chartAreaHeight = bars.length * ROW_HEIGHT;
-  const svgHeight = PADDING.top + chartAreaHeight + PADDING.bottom;
+  const svgHeight = padTop + chartAreaHeight + padBottom;
 
   // ── Scale ──
-  // The bar area maps [0 … maxValue] → [0 … BAR_AREA_WIDTH]
+  // The bar area maps [0 … maxValue] → [0 … barAreaWidth]
 
   const maxValue = Math.max(...bars.map((b) => b.totalValue), targetValue);
   if (maxValue <= 0) return "";
 
-  const scaleX = (value: number): number => (value / maxValue) * BAR_AREA_WIDTH;
+  const scaleX = (value: number): number => (value / maxValue) * barAreaWidth;
 
   // Target line position
-  const targetX = PADDING.left + scaleX(targetValue);
+  const targetX = padLeft + scaleX(targetValue);
 
   // ── SVG elements ──
 
@@ -408,54 +450,61 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
   elements.push(buildThemeStyleBlock());
 
   // ── 1. Background ──
-  // Explicit fill so the SVG is legible regardless of how Raycast
-  // composites the <img> element (some renderers default to white).
-  // The CSS `.c-bg` rule overrides this inline fill when media
-  // queries are supported, ensuring the correct theme is applied.
 
   elements.push(
     `<rect class="${CLS.bg}" x="0" y="0" width="${SVG_WIDTH}" height="${svgHeight}" ` +
       `${fillAttr(palette.background)} rx="6" />`,
   );
 
-  // ── 2. Bar track backgrounds ──
+  // ── 2. Title (optional) ──
+
+  if (hasTitle) {
+    const titleY = PADDING_BASE.top + FONT_SIZE_TITLE * 0.38 + 2;
+    elements.push(
+      `<text class="${CLS.text}" x="${padLeft}" y="${titleY}" ` +
+        `${fillAttr(palette.text)} font-size="${FONT_SIZE_TITLE}" font-weight="600" ` +
+        `font-family="${FONT_FAMILY}" text-anchor="start">${title}</text>`,
+    );
+  }
+
+  // ── 3. Bar track backgrounds ──
 
   for (let i = 0; i < bars.length; i++) {
-    const y = PADDING.top + i * ROW_HEIGHT;
+    const y = padTop + i * ROW_HEIGHT;
     elements.push(
-      `<rect class="${CLS.track}" x="${PADDING.left}" y="${y}" width="${BAR_AREA_WIDTH}" height="${BAR_HEIGHT}" ` +
+      `<rect class="${CLS.track}" x="${padLeft}" y="${y}" width="${barAreaWidth}" height="${BAR_HEIGHT}" ` +
         `${fillAttr(palette.barTrack)} rx="2" />`,
     );
   }
 
-  // ── 3. FIRE year highlight ──
+  // ── 4. FIRE year highlight ──
 
   for (let i = 0; i < bars.length; i++) {
     if (!bars[i].isFireYear) continue;
-    const y = PADDING.top + i * ROW_HEIGHT - 1;
+    const y = padTop + i * ROW_HEIGHT - 1;
     elements.push(
       `<rect class="${CLS.fireHl}" x="0" y="${y}" width="${SVG_WIDTH}" height="${BAR_HEIGHT + 2}" ` +
         `${fillAttr(palette.fireHighlight)} rx="3" />`,
     );
   }
 
-  // ── 4. Base growth bars ──
+  // ── 5. Base growth bars ──
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
     const w = scaleX(bar.baseGrowthValue);
     if (w <= 0) continue;
 
-    const y = PADDING.top + i * ROW_HEIGHT;
+    const y = padTop + i * ROW_HEIGHT;
     // Only round the right edge if there is no contribution segment following
     const rx = bar.contributionValue > 0 ? 0 : 2;
     elements.push(
-      `<rect class="${CLS.base}" x="${PADDING.left}" y="${y}" width="${w}" height="${BAR_HEIGHT}" ` +
+      `<rect class="${CLS.base}" x="${padLeft}" y="${y}" width="${w}" height="${BAR_HEIGHT}" ` +
         `${fillAttr(palette.baseGrowth)} rx="${rx}" />`,
     );
   }
 
-  // ── 5. Contribution bars (stacked after base growth) ──
+  // ── 6. Contribution bars (stacked after base growth) ──
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
@@ -463,8 +512,8 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
     if (contribW <= 0) continue;
 
     const baseW = scaleX(bar.baseGrowthValue);
-    const x = PADDING.left + baseW;
-    const y = PADDING.top + i * ROW_HEIGHT;
+    const x = padLeft + baseW;
+    const y = padTop + i * ROW_HEIGHT;
 
     elements.push(
       `<rect class="${CLS.contrib}" x="${x}" y="${y}" width="${contribW}" height="${BAR_HEIGHT}" ` +
@@ -472,49 +521,77 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
     );
   }
 
-  // ── 6. Target line (vertical dashed) ──
+  // ── 7. Inline bar value labels ──
 
-  const targetLineY1 = PADDING.top - 2;
-  const targetLineY2 = PADDING.top + chartAreaHeight + 2;
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
+    const textY = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_BAR_LABEL * 0.38;
+
+    // Base growth label
+    const baseW = scaleX(bar.baseGrowthValue);
+    if (bar.baseLabel && baseW >= MIN_LABEL_WIDTH) {
+      elements.push(
+        `<text class="${CLS.baseLbl}" x="${padLeft + 4}" y="${textY}" ` +
+          `${fillAttr(palette.baseBarLabel)} font-size="${FONT_SIZE_BAR_LABEL}" ` +
+          `font-family="${FONT_FAMILY}" text-anchor="start">${bar.baseLabel}</text>`,
+      );
+    }
+
+    // Contribution label
+    const contribW = scaleX(bar.contributionValue);
+    if (bar.contribLabel && contribW >= MIN_LABEL_WIDTH) {
+      const contribX = padLeft + baseW + 4;
+      elements.push(
+        `<text class="${CLS.contribLbl}" x="${contribX}" y="${textY}" ` +
+          `${fillAttr(palette.contribBarLabel)} font-size="${FONT_SIZE_BAR_LABEL}" ` +
+          `font-family="${FONT_FAMILY}" text-anchor="start">${bar.contribLabel}</text>`,
+      );
+    }
+  }
+
+  // ── 8. Target line (vertical dashed) ──
+
+  const targetLineY1 = padTop - 2;
+  const targetLineY2 = padTop + chartAreaHeight + 2;
   elements.push(
     `<line class="${CLS.target}" x1="${targetX}" y1="${targetLineY1}" x2="${targetX}" y2="${targetLineY2}" ` +
       `${strokeAttr(palette.targetLine)} stroke-width="1.5" stroke-dasharray="4,3" />`,
   );
 
-  // ── 7. Year labels (left of bars) ──
+  // ── 9. Year labels (left of bars) ──
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
-    const y = PADDING.top + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
+    const y = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
     const cls = bar.isFireYear ? CLS.fire : CLS.text;
     const color = bar.isFireYear ? palette.fireAccent : palette.text;
     const weight = bar.isFireYear ? "bold" : "normal";
     elements.push(
-      `<text class="${cls}" x="${PADDING.left - 6}" y="${y}" ` +
+      `<text class="${cls}" x="${padLeft - 6}" y="${y}" ` +
         `${fillAttr(color)} font-size="${FONT_SIZE_LABEL}" font-weight="${weight}" ` +
         `font-family="${FONT_FAMILY}" text-anchor="end">${bar.year}</text>`,
     );
   }
 
-  // ── 8. Value labels (right of bars) ──
+  // ── 10. Value labels (right of bars) ──
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
-    const y = PADDING.top + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
+    const y = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
     const cls = bar.isFireYear ? CLS.fire : CLS.muted;
     const color = bar.isFireYear ? palette.fireAccent : palette.mutedText;
     const suffix = bar.isFireYear ? "  🎯" : "";
     elements.push(
-      `<text class="${cls}" x="${SVG_WIDTH - PADDING.right + 6}" y="${y}" ` +
+      `<text class="${cls}" x="${SVG_WIDTH - padRight + 6}" y="${y}" ` +
         `${fillAttr(color)} font-size="${FONT_SIZE_LABEL}" ` +
         `font-family="${FONT_FAMILY}" text-anchor="start">${bar.label}${suffix}</text>`,
     );
   }
 
-  // ── 9. Legend ──
+  // ── 11. Legend ──
 
-  const legendY = PADDING.top + chartAreaHeight + LEGEND_HEIGHT - 4;
-  const legendElements = buildLegend(palette, targetLabel, legendY);
+  const legendY = padTop + chartAreaHeight + LEGEND_HEIGHT - 4;
+  const legendElements = buildLegend(palette, targetLabel, legendY, padLeft, padRight);
   elements.push(...legendElements);
 
   // ── Assemble SVG ──
@@ -533,18 +610,26 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
 /**
  * Builds the legend row at the bottom of the chart.
  *
- * Layout:  ■ Portfolio Growth   ■ Contributions   │ £1.0M Target
+ * Layout:  ■ Base   ■ Contributions   │ £1.0M Target
  *
  * @param palette     - Active theme palette
  * @param targetLabel - Pre-formatted target value string
  * @param y           - Y-coordinate for the legend baseline
+ * @param padLeft     - Left padding for alignment
+ * @param padRight   - Right padding (reserved)
  * @returns Array of SVG element strings
  */
-function buildLegend(palette: ThemePalette, targetLabel: string, y: number): string[] {
+function buildLegend(
+  palette: ThemePalette,
+  targetLabel: string,
+  y: number,
+  padLeft: number,
+  padRight: number,
+): string[] {
   const els: string[] = [];
-  let x = PADDING.left;
+  let x = padLeft ? padLeft : padRight ? SVG_WIDTH - padRight : 0;
 
-  // ── Portfolio Growth swatch + label ──
+  // ── Base swatch + label ──
   els.push(
     `<rect class="${CLS.base}" x="${x}" y="${y - LEGEND_SWATCH + 1}" width="${LEGEND_SWATCH}" height="${LEGEND_SWATCH}" ` +
       `${fillAttr(palette.baseGrowth)} rx="1" />`,
@@ -552,9 +637,9 @@ function buildLegend(palette: ThemePalette, targetLabel: string, y: number): str
   x += LEGEND_SWATCH + 5;
   els.push(
     `<text class="${CLS.legend}" x="${x}" y="${y}" ${fillAttr(palette.legendText)} font-size="${FONT_SIZE_LEGEND}" ` +
-      `font-family="${FONT_FAMILY}">Portfolio Growth</text>`,
+      `font-family="${FONT_FAMILY}">Base</text>`,
   );
-  x += measureText("Portfolio Growth", FONT_SIZE_LEGEND) + LEGEND_ITEM_GAP;
+  x += measureText("Base", FONT_SIZE_LEGEND) + LEGEND_ITEM_GAP;
 
   // ── Contributions swatch + label ──
   els.push(
@@ -584,7 +669,7 @@ function buildLegend(palette: ThemePalette, targetLabel: string, y: number): str
 }
 
 // ──────────────────────────────────────────
-// Text Measurement (approximate)
+// Text Measurement (exported for split chart)
 // ──────────────────────────────────────────
 
 /**
@@ -597,7 +682,7 @@ function buildLegend(palette: ThemePalette, targetLabel: string, y: number): str
  * @param fontSize - Font size in px
  * @returns Approximate width in px
  */
-function measureText(text: string, fontSize: number): number {
+export function measureText(text: string, fontSize: number): number {
   // Average character width ≈ 0.6 × font size for proportional sans-serif
   return text.length * fontSize * 0.6;
 }
