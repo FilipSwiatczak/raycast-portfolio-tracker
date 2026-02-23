@@ -32,20 +32,20 @@ import { FireContribution, FireProjection, FireProjectionYear, FireSettings } fr
 
 describe("buildBar", () => {
   it("renders a fully filled bar when filledWidth equals totalWidth", () => {
-    const bar = buildBar(10, 10, 5);
+    const bar = buildBar(10, 10, 5); // totalWidth=10, filledWidth=10, targetPos=5
     expect(bar).toBe("██████████");
     expect(bar.length).toBe(10);
   });
 
   it("renders a fully empty bar when filledWidth is 0", () => {
-    const bar = buildBar(0, 10, 5);
+    const bar = buildBar(10, 0, 5); // totalWidth=10, filledWidth=0, targetPos=5
     expect(bar).toBe("░░░░░│░░░░");
     expect(bar.length).toBe(10);
   });
 
   it("shows the target marker at the correct position when not yet filled", () => {
     // 3 filled, 10 total, target at position 7
-    const bar = buildBar(3, 10, 7);
+    const bar = buildBar(10, 3, 7); // totalWidth=10, filledWidth=3, targetPos=7
     expect(bar[7]).toBe("│");
     expect(bar.substring(0, 3)).toBe("███");
     expect(bar.length).toBe(10);
@@ -53,7 +53,7 @@ describe("buildBar", () => {
 
   it("hides the target marker when filled past it", () => {
     // 8 filled, 10 total, target at position 5
-    const bar = buildBar(8, 10, 5);
+    const bar = buildBar(10, 8, 5); // totalWidth=10, filledWidth=8, targetPos=5
     // Target at 5 should be absorbed into the filled portion
     expect(bar[5]).toBe("█");
     expect(bar.substring(0, 8)).toBe("████████");
@@ -61,39 +61,39 @@ describe("buildBar", () => {
   });
 
   it("places target marker at position 0 correctly", () => {
-    const bar = buildBar(0, 5, 0);
+    const bar = buildBar(5, 0, 0); // totalWidth=5, filledWidth=0, targetPos=0
     expect(bar[0]).toBe("│");
     expect(bar).toBe("│░░░░");
   });
 
   it("handles target at the last position", () => {
-    const bar = buildBar(0, 5, 4);
+    const bar = buildBar(5, 0, 4); // totalWidth=5, filledWidth=0, targetPos=4
     expect(bar[4]).toBe("│");
     expect(bar).toBe("░░░░│");
   });
 
   it("handles single-character bar", () => {
-    const bar = buildBar(0, 1, 0);
+    const bar = buildBar(1, 0, 0); // totalWidth=1, filledWidth=0, targetPos=0
     expect(bar).toBe("│");
     expect(bar.length).toBe(1);
   });
 
   it("handles single-character filled bar", () => {
-    const bar = buildBar(1, 1, 0);
+    const bar = buildBar(1, 1, 0); // totalWidth=1, filledWidth=1, targetPos=0
     expect(bar).toBe("█");
     expect(bar.length).toBe(1);
   });
 
   it("preserves total width regardless of fill", () => {
     for (let fill = 0; fill <= 20; fill++) {
-      const bar = buildBar(fill, 20, 10);
+      const bar = buildBar(20, fill, 10); // totalWidth=20, filledWidth=fill, targetPos=10
       expect(bar.length).toBe(20);
     }
   });
 
   it("target marker at exact boundary of fill (fillWidth == targetPos)", () => {
     // fill 5, target 5 — target not yet filled past, so marker shows
-    const bar = buildBar(5, 10, 5);
+    const bar = buildBar(10, 5, 5); // totalWidth=10, filledWidth=5, targetPos=5
     expect(bar[5]).toBe("│");
     expect(bar.substring(0, 5)).toBe("█████");
   });
@@ -218,7 +218,7 @@ describe("buildProjectionChart", () => {
 
   it("returns a message for empty years", () => {
     const chart = buildProjectionChart([], 1_000_000, "GBP", null);
-    expect(chart).toBe("*No projection data*");
+    expect(chart).toBe("*No projection data available.*");
   });
 
   it("wraps the chart in a code block", () => {
@@ -255,13 +255,13 @@ describe("buildProjectionChart", () => {
     // Year 2031 (index 6): 200K + 600K = 800K → hits target
     const fireYear = 2031;
     const chart = buildProjectionChart(years, 800_000, "GBP", fireYear);
-    expect(chart).toContain("🎯 FIRE!");
+    expect(chart).toContain(" 🎯");
   });
 
   it("does not show FIRE marker when target is not hit", () => {
     const years = makeYears(5, 200_000, 50_000, 10_000_000);
     const chart = buildProjectionChart(years, 10_000_000, "GBP", null);
-    expect(chart).not.toContain("🎯 FIRE!");
+    expect(chart).not.toContain(" 🎯");
   });
 
   it("shows only one FIRE marker even when multiple years hit target", () => {
@@ -269,7 +269,7 @@ describe("buildProjectionChart", () => {
     // Years from index 3 onward hit the target
     const fireYear = 2028;
     const chart = buildProjectionChart(years, 500_000, "GBP", fireYear);
-    const markerCount = (chart.match(/🎯 FIRE!/g) || []).length;
+    const markerCount = (chart.match(/ 🎯/g) || []).length;
     expect(markerCount).toBe(1);
   });
 
@@ -298,7 +298,7 @@ describe("buildProjectionChart", () => {
     ];
     const chart = buildProjectionChart(years, 0, "GBP", null);
     // maxValue is 0, should handle gracefully
-    expect(chart).toBe("*No projection data*");
+    expect(chart).toBe("*No projection data available.*");
   });
 });
 
@@ -613,9 +613,9 @@ describe("buildProjectionSVG", () => {
     expect(svg).toContain("🎯");
   });
 
-  it("contains a legend with Portfolio Growth and Contributions labels", () => {
+  it("contains a legend with Base and Contributions labels", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
-    expect(svg).toContain("Portfolio Growth");
+    expect(svg).toContain("Base");
     expect(svg).toContain("Contributions");
     expect(svg).toContain("Target");
   });
@@ -705,7 +705,7 @@ describe("buildProjectionSVG", () => {
     // Contributions swatch uses c-contrib class
     expect(svg).toMatch(/class="c-contrib"[^>]*width="10"[^>]*height="10"/);
     // Legend text uses c-legend class
-    expect(svg).toMatch(/class="c-legend"[^>]*>Portfolio Growth<\/text>/);
+    expect(svg).toMatch(/class="c-legend"[^>]*>Base<\/text>/);
     expect(svg).toMatch(/class="c-legend"[^>]*>Contributions<\/text>/);
     // Target legend line uses c-target class
     expect(svg).toMatch(/class="c-target"[^>]*stroke-dasharray="3,2"/);
@@ -1009,7 +1009,7 @@ describe("buildDashboardMarkdown", () => {
     expect(b64Match).not.toBeNull();
     const svg = Buffer.from(b64Match![1], "base64").toString("utf-8");
     expect(svg).toContain("<svg");
-    expect(svg).toContain("Portfolio Growth");
+    expect(svg).toContain("Base");
     expect(svg).toContain("Contributions");
   });
 
