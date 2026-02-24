@@ -167,3 +167,77 @@ export function isValid(result: ValidationResult): boolean {
 export function firstError(...results: ValidationResult[]): ValidationResult {
   return results.find((r) => r !== undefined);
 }
+
+// ──────────────────────────────────────────
+// Asset Name Validation
+// ──────────────────────────────────────────
+
+/**
+ * Validates an asset display name.
+ *
+ * Rules:
+ * - Must not be empty or whitespace-only
+ * - Must be between 1 and 120 characters (after trimming)
+ *
+ * @param name - The asset name to validate
+ * @returns Error message or undefined if valid
+ */
+export function validateAssetName(name: string | undefined): ValidationResult {
+  const trimmed = (name ?? "").trim();
+
+  if (trimmed.length === 0) {
+    return "Asset name is required";
+  }
+
+  if (trimmed.length > 120) {
+    return "Asset name must be 120 characters or fewer";
+  }
+
+  return undefined;
+}
+
+// ──────────────────────────────────────────
+// Price Validation
+// ──────────────────────────────────────────
+
+/**
+ * Validates a price input string (from a text field).
+ *
+ * Rules:
+ * - Must not be empty
+ * - Must be a valid number
+ * - Must be greater than zero
+ * - Must not exceed a reasonable maximum (10 billion)
+ * - Must not have more than 6 decimal places
+ *
+ * @param input - Raw string from the text input
+ * @returns Error message or undefined if valid
+ */
+export function validatePrice(input: string | undefined): ValidationResult {
+  const trimmed = (input ?? "").trim();
+
+  if (trimmed.length === 0) {
+    return "Price is required";
+  }
+
+  const value = Number(trimmed);
+
+  if (isNaN(value) || !isFinite(value)) {
+    return "Must be a valid number";
+  }
+
+  if (value <= 0) {
+    return "Price must be greater than zero";
+  }
+
+  if (value > 10_000_000_000) {
+    return "Price seems too large — please check your input";
+  }
+
+  const parts = trimmed.split(".");
+  if (parts.length === 2 && parts[1].length > 6) {
+    return "Maximum 6 decimal places allowed";
+  }
+
+  return undefined;
+}

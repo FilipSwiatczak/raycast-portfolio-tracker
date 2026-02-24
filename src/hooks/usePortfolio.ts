@@ -276,6 +276,7 @@ export function usePortfolio(): UsePortfolioReturn {
         units: number;
         currency: string;
         assetType: AssetType;
+        priceOverride?: number;
       },
     ): Promise<Position> => {
       const newPosition: Position = {
@@ -285,6 +286,7 @@ export function usePortfolio(): UsePortfolioReturn {
         units: params.units,
         currency: params.currency,
         assetType: params.assetType,
+        priceOverride: params.priceOverride,
         addedAt: new Date().toISOString(),
       };
 

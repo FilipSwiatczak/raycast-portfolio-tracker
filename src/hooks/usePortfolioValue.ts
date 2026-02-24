@@ -218,13 +218,14 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
           };
         }
 
-        // Regular (traded) positions: use fetched price data.
+        // Regular (traded) positions: use fetched price data unless a manual override is set.
         const priceData = prices.get(position.symbol);
-        const currentPrice = priceData?.price ?? 0;
+        const hasPriceOverride = typeof position.priceOverride === "number";
+        const currentPrice = hasPriceOverride ? position.priceOverride! : (priceData?.price ?? 0);
         const totalNativeValue = position.units * currentPrice;
         const totalBaseValue = totalNativeValue * fxRate;
-        const change = priceData?.change ?? 0;
-        const changePercent = priceData?.changePercent ?? 0;
+        const change = hasPriceOverride ? 0 : (priceData?.change ?? 0);
+        const changePercent = hasPriceOverride ? 0 : (priceData?.changePercent ?? 0);
 
         return {
           position,

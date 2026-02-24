@@ -25,6 +25,7 @@ import { EditPositionForm } from "./components/EditPositionForm";
 import { AddUnitsForm } from "./components/AddUnitsForm";
 import { AddCashForm } from "./components/AddCashForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
+import { SearchInvestmentsFlow } from "./components/SearchInvestmentsFlow";
 import { BatchRenameMatch } from "./components/BatchRenameForm";
 import { Account, Position, AccountType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
@@ -225,26 +226,16 @@ export default function PortfolioCommand(): React.JSX.Element {
   }
 
   function handleSearchInvestments(): void {
-    // If there's only one account, go straight to search for that account.
-    // If multiple accounts, show search with account selection (handled within SearchInvestmentsView).
-    const accounts = portfolio?.accounts ?? [];
-
-    if (accounts.length === 1) {
-      handleAddPosition(accounts[0].id);
-    } else if (accounts.length > 1) {
-      // Push a search view that lets the user pick which account to add to.
-      // For now, default to the first account — in a future iteration,
-      // the SearchInvestmentsView could include an account picker dropdown.
-      push(
-        <SearchInvestmentsView
-          accountId={accounts[0].id}
-          accountName={accounts[0].name}
-          onConfirm={async (params) => {
-            await addPosition(accounts[0].id, params);
-          }}
-        />,
-      );
-    }
+    // Use the full SearchInvestmentsFlow: search first, then pick an account,
+    // then confirm details — no account is assumed up front.
+    push(
+      <SearchInvestmentsFlow
+        onDone={() => {
+          pop();
+          revalidatePortfolio();
+        }}
+      />,
+    );
   }
 
   // ── Sample Portfolio Handlers ──

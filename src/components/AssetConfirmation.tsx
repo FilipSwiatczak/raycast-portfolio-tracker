@@ -38,7 +38,7 @@ import { Form, ActionPanel, Action, Detail, Icon, useNavigation, Color } from "@
 import { useState, useMemo } from "react";
 import { AssetSearchResult, AssetType } from "../utils/types";
 import { useAssetPrice } from "../hooks/useAssetPrice";
-import { validateUnits, parseUnits } from "../utils/validation";
+import { validateUnits, parseUnits, validateAssetName, validatePrice } from "../utils/validation";
 import { formatCurrency, formatPercent } from "../utils/formatting";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
@@ -67,6 +67,7 @@ interface AssetConfirmationProps {
     units: number;
     currency: string;
     assetType: AssetType;
+    priceOverride?: number;
   }) => Promise<void>;
 }
 
@@ -267,6 +268,8 @@ export function AssetConfirmationForm({
   const { price, isLoading: isPriceLoading, error: priceError } = useAssetPrice(result.symbol);
 
   const [unitsError, setUnitsError] = useState<string | undefined>(undefined);
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [priceOverrideError, setPriceOverrideError] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ── Handlers ──
@@ -284,12 +287,50 @@ export function AssetConfirmationForm({
     }
   }
 
-  async function handleSubmit(values: { units: string }) {
-    // Validate
+  function handleNameBlur(event: Form.Event<string>) {
+    const error = validateAssetName(event.target.value);
+    setNameError(error);
+  }
+
+  function handleNameChange() {
+    if (nameError) {
+      setNameError(undefined);
+    }
+  }
+
+  function handlePriceBlur(event: Form.Event<string>) {
+    if (event.target.value && event.target.value.trim().length > 0) {
+      const error = validatePrice(event.target.value);
+      setPriceOverrideError(error);
+    }
+  }
+
+  function handlePriceChange() {
+    if (priceOverrideError) {
+      setPriceOverrideError(undefined);
+    }
+  }
+
+  async function handleSubmit(values: { name: string; units: string; priceOverride?: string }) {
+    const nameValidation = validateAssetName(values.name);
+    if (nameValidation) {
+      setNameError(nameValidation);
+      return;
+    }
+
     const unitValidation = validateUnits(values.units);
     if (unitValidation) {
       setUnitsError(unitValidation);
       return;
+    }
+
+    const priceOverrideValue = values.priceOverride?.trim();
+    if (priceOverrideValue) {
+      const priceValidation = validatePrice(priceOverrideValue);
+      if (priceValidation) {
+        setPriceOverrideError(priceValidation);
+        return;
+      }
     }
 
     if (!price) {
@@ -302,10 +343,11 @@ export function AssetConfirmationForm({
     try {
       await onConfirm({
         symbol: result.symbol,
-        name: price.name || result.name,
+        name: values.name.trim(),
         units: parseUnits(values.units),
         currency: price.currency,
         assetType: result.type,
+        priceOverride: priceOverrideValue ? parseUnits(priceOverrideValue) : undefined,
       });
       pop();
     } catch (error) {
@@ -352,6 +394,34 @@ export function AssetConfirmationForm({
       {priceError && <Form.Description title="⚠️ Warning" text={`Price data may be stale: ${priceError.message}`} />}
 
       <Form.Separator />
+
+      {/* ── Editable Asset Fields ── */}
+      <Form.TextField
+        id="name"
+        title="Asset Name"
+        defaultValue={price?.name ?? result.name}
+        error={nameError}
+        onChange={handleNameChange}
+        onBlur={handleNameBlur}
+      />
+
+      <Form.TextField
+        id="priceOverride"
+        title="Price per Unit"
+        placeholder={price ? formatCurrency(price.price, price.currency) : "e.g. 72.50"}
+        error={priceOverrideError}
+        onChange={handlePriceChange}
+        onBlur={handlePriceBlur}
+      />
+
+      <Form.Description
+        title=""
+        text={
+          price
+            ? `Leave blank to use the live price (${formatCurrency(price.price, price.currency)}).`
+            : "Enter a price per unit (optional)."
+        }
+      />
 
       {/* ── Units Input ── */}
       <Form.Description title="Account" text={accountName} />

@@ -111,6 +111,11 @@ export interface Position {
   currency: string;
   /** Asset type for display purposes */
   assetType: AssetType;
+  /**
+   * Optional manual price override (per unit) in the asset's native currency.
+   * When set, this should take precedence over live quotes.
+   */
+  priceOverride?: number;
   /** ISO 8601 timestamp when this position was added */
   addedAt: string;
 }

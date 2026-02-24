@@ -86,6 +86,13 @@ export interface SearchInvestmentsViewProps {
     currency: string;
     assetType: AssetType;
   }) => Promise<void>;
+
+  /**
+   * Optional override for result selection.
+   * When provided, the view delegates selection to the parent flow
+   * instead of pushing the AssetConfirmationForm.
+   */
+  onSelectResult?: (result: AssetSearchResult) => void;
 }
 
 // ──────────────────────────────────────────
@@ -105,6 +112,7 @@ export function SearchInvestmentsView({
   accountId,
   accountName,
   onConfirm,
+  onSelectResult,
 }: SearchInvestmentsViewProps): React.JSX.Element {
   const { push } = useNavigation();
   const [searchText, setSearchText] = useState("");
@@ -127,6 +135,11 @@ export function SearchInvestmentsView({
    * Navigates to the AssetConfirmationForm if an account context is available.
    */
   function handleSelectResult(result: AssetSearchResult): void {
+    if (onSelectResult) {
+      onSelectResult(result);
+      return;
+    }
+
     if (!canAddPositions) {
       // In browse-only mode, we could show asset details in the future.
       // For now, we just do nothing if there's no account context.
@@ -154,10 +167,10 @@ export function SearchInvestmentsView({
   return (
     <List
       isLoading={isLoading}
+      searchText={searchText}
       onSearchTextChange={setSearchText}
       searchBarPlaceholder={placeholder}
       navigationTitle={canAddPositions ? `Add Position to ${accountName}` : "Search Investments"}
-      throttle
       filtering={false}
     >
       {/* ── No Query State ── */}
