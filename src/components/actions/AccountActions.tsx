@@ -28,7 +28,7 @@
 
 import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
-import { Account } from "../../utils/types";
+import { Account, isPropertyAccountType } from "../../utils/types";
 import { ACCOUNT_TYPE_LABELS } from "../../utils/constants";
 
 // ──────────────────────────────────────────
@@ -44,6 +44,9 @@ interface AccountActionsProps {
 
   /** Callback to navigate to the "Add Cash" form for this account */
   onAddCash: () => void;
+
+  /** Callback to navigate to the "Add Property" form for this account */
+  onAddProperty?: () => void;
 
   /** Callback to navigate to the edit form for this account */
   onEditAccount: () => void;
@@ -72,7 +75,8 @@ interface AccountActionsProps {
  * warning the user that all positions within the account will be lost.
  *
  * Keyboard shortcuts:
- * - ⇧⌘N → Add Position to this account
+ * - ⇧⌘N → Add Position to this account (hidden for Property accounts)
+ * - ⇧⌘P → Add Property to this account (Property accounts only)
  * - ⇧⌘C → Add Cash to this account
  * - ⌘E → Edit Account
  * - ⌃X → Delete Account (with confirmation)
@@ -81,11 +85,13 @@ export function AccountActions({
   account,
   onAddPosition,
   onAddCash,
+  onAddProperty,
   onEditAccount,
   onDeleteAccount,
 }: AccountActionsProps): React.JSX.Element {
   const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
   const positionCount = account.positions.length;
+  const isProperty = isPropertyAccountType(account.type);
 
   /**
    * Shows a confirmation dialog before deleting the account.
@@ -117,12 +123,25 @@ export function AccountActions({
 
   return (
     <ActionPanel.Section title={`${account.name} (${typeLabel})`}>
-      <Action
-        title="Add Position"
-        icon={Icon.PlusSquare}
-        shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
-        onAction={onAddPosition}
-      />
+      {/* Property accounts show "Add Property" as the primary add action */}
+      {isProperty && onAddProperty && (
+        <Action
+          title="Add Property"
+          icon={Icon.House}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+          onAction={onAddProperty}
+        />
+      )}
+
+      {/* Non-property accounts show "Add Position" (Yahoo search) */}
+      {!isProperty && (
+        <Action
+          title="Add Position"
+          icon={Icon.PlusSquare}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
+          onAction={onAddPosition}
+        />
+      )}
 
       <Action
         title="Add Cash"

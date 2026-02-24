@@ -24,10 +24,12 @@ import { AccountForm } from "./components/AccountForm";
 import { EditPositionForm } from "./components/EditPositionForm";
 import { AddUnitsForm } from "./components/AddUnitsForm";
 import { AddCashForm } from "./components/AddCashForm";
+import { AddMortgageForm } from "./components/AddMortgageForm";
+import { EditMortgageForm } from "./components/EditMortgageForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
 import { SearchInvestmentsFlow } from "./components/SearchInvestmentsFlow";
 import { BatchRenameMatch } from "./components/BatchRenameForm";
-import { Account, Position, AccountType } from "./utils/types";
+import { Account, Position, AccountType, isPropertyAssetType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
 import { clearPriceCache } from "./services/price-cache";
 import { SAMPLE_ACCOUNTS, isSampleAccount } from "./utils/sample-portfolio";
@@ -50,6 +52,7 @@ export default function PortfolioCommand(): React.JSX.Element {
     removeAccount,
     addPosition,
     updatePosition,
+    updatePropertyPosition,
     renamePosition,
     restorePositionName,
     batchRenamePositions,
@@ -216,6 +219,42 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  function handleAddProperty(accountId: string): void {
+    const account = portfolio?.accounts.find((a) => a.id === accountId);
+    const accountName = account?.name ?? "Account";
+
+    push(
+      <AddMortgageForm
+        accountId={accountId}
+        accountName={accountName}
+        baseCurrency={baseCurrency}
+        onConfirm={async (params) => {
+          await addPosition(accountId, params);
+        }}
+      />,
+    );
+  }
+
+  function handleEditPropertyPosition(account: Account, position: Position): void {
+    if (!isPropertyAssetType(position.assetType)) return;
+
+    push(
+      <EditMortgageForm
+        position={position}
+        accountId={account.id}
+        accountName={account.name}
+        baseCurrency={baseCurrency}
+        onSave={async (updates) => {
+          await updatePropertyPosition(account.id, position.id, updates);
+        }}
+        onDone={() => {
+          pop();
+          revalidatePortfolio();
+        }}
+      />,
+    );
+  }
+
   async function handleDeletePosition(accountId: string, positionId: string): Promise<void> {
     await removePosition(accountId, positionId);
   }
@@ -292,6 +331,8 @@ export default function PortfolioCommand(): React.JSX.Element {
       onDeleteAccount={handleDeleteAccount}
       onAddPosition={handleAddPosition}
       onAddCash={handleAddCash}
+      onAddProperty={handleAddProperty}
+      onEditPropertyPosition={handleEditPropertyPosition}
       onEditPosition={handleEditPosition}
       onAddUnits={handleAddUnits}
       onDeletePosition={handleDeletePosition}

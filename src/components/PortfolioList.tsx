@@ -38,6 +38,7 @@ import {
   ErrorType,
   SortField,
   SortDirection,
+  isPropertyAssetType,
 } from "../utils/types";
 import { formatCurrency, formatCurrencyCompact, formatRelativeTime, getDisplayName } from "../utils/formatting";
 import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_COLORS, SORT_OPTIONS, DEFAULT_SORT_KEY } from "../utils/constants";
@@ -83,6 +84,12 @@ export interface PortfolioListProps {
   /** Navigate to the "Add Cash" form for an account */
   onAddCash: (accountId: string) => void;
 
+  /** Navigate to the "Add Property" form for a Property account */
+  onAddProperty: (accountId: string) => void;
+
+  /** Navigate to the "Edit Property" form for a MORTGAGE/OWNED_PROPERTY position */
+  onEditPropertyPosition: (account: Account, position: Position) => void;
+
   /** Navigate to the "Edit Position" form for a specific position */
   onEditPosition: (account: Account, position: Position) => void;
 
@@ -119,6 +126,8 @@ export function PortfolioList({
   onDeleteAccount,
   onAddPosition,
   onAddCash,
+  onAddProperty,
+  onEditPropertyPosition,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -284,6 +293,8 @@ export function PortfolioList({
           onDeleteAccount={onDeleteAccount}
           onAddPosition={onAddPosition}
           onAddCash={onAddCash}
+          onAddProperty={onAddProperty}
+          onEditPropertyPosition={onEditPropertyPosition}
           onEditPosition={onEditPosition}
           onAddUnits={onAddUnits}
           onDeletePosition={onDeletePosition}
@@ -329,6 +340,8 @@ interface AccountSectionProps {
   onDeleteAccount: (accountId: string) => Promise<void>;
   onAddPosition: (accountId: string) => void;
   onAddCash: (accountId: string) => void;
+  onAddProperty: (accountId: string) => void;
+  onEditPropertyPosition: (account: Account, position: Position) => void;
   onEditPosition: (account: Account, position: Position) => void;
   onAddUnits: (account: Account, position: Position) => void;
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
@@ -348,6 +361,8 @@ function AccountSection({
   onDeleteAccount,
   onAddPosition,
   onAddCash,
+  onAddProperty,
+  onEditPropertyPosition,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -389,6 +404,7 @@ function AccountSection({
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
                 onAddCash={() => onAddCash(account.id)}
+                onAddProperty={() => onAddProperty(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -404,39 +420,47 @@ function AccountSection({
       )}
 
       {/* ── Sorted Position Items ── */}
-      {sortedPositions.map((positionVal) => (
-        <PositionListItem
-          key={positionVal.position.id}
-          valuation={positionVal}
-          baseCurrency={baseCurrency}
-          accountName={account.name}
-          isShowingDetail={isShowingDetail}
-          actions={
-            <ActionPanel>
-              <PositionActions
-                position={positionVal.position}
-                accountId={account.id}
-                onAddUnits={() => onAddUnits(account, positionVal.position)}
-                onEditPosition={() => onEditPosition(account, positionVal.position)}
-                onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
-              />
-              <AccountActions
-                account={account}
-                onAddPosition={() => onAddPosition(account.id)}
-                onAddCash={() => onAddCash(account.id)}
-                onEditAccount={() => onEditAccount(account)}
-                onDeleteAccount={() => onDeleteAccount(account.id)}
-              />
-              <PortfolioActions
-                onAddAccount={onAddAccount}
-                onRefresh={onRefresh}
-                onSearchInvestments={onSearchInvestments}
-                toggleDetailAction={toggleDetailAction}
-              />
-            </ActionPanel>
-          }
-        />
-      ))}
+      {sortedPositions.map((positionVal) => {
+        const isPropertyPos = isPropertyAssetType(positionVal.position.assetType);
+        return (
+          <PositionListItem
+            key={positionVal.position.id}
+            valuation={positionVal}
+            baseCurrency={baseCurrency}
+            accountName={account.name}
+            isShowingDetail={isShowingDetail}
+            actions={
+              <ActionPanel>
+                <PositionActions
+                  position={positionVal.position}
+                  accountId={account.id}
+                  onAddUnits={() => onAddUnits(account, positionVal.position)}
+                  onEditPosition={() =>
+                    isPropertyPos
+                      ? onEditPropertyPosition(account, positionVal.position)
+                      : onEditPosition(account, positionVal.position)
+                  }
+                  onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
+                />
+                <AccountActions
+                  account={account}
+                  onAddPosition={() => onAddPosition(account.id)}
+                  onAddCash={() => onAddCash(account.id)}
+                  onAddProperty={() => onAddProperty(account.id)}
+                  onEditAccount={() => onEditAccount(account)}
+                  onDeleteAccount={async () => await onDeleteAccount(account.id)}
+                />
+                <PortfolioActions
+                  onAddAccount={onAddAccount}
+                  onRefresh={onRefresh}
+                  onSearchInvestments={onSearchInvestments}
+                  toggleDetailAction={toggleDetailAction}
+                />
+              </ActionPanel>
+            }
+          />
+        );
+      })}
 
       {/* ── Account Summary Row (pinned to bottom) ── */}
       {positionCount > 0 && (
@@ -484,6 +508,7 @@ function AccountSection({
                 account={account}
                 onAddPosition={() => onAddPosition(account.id)}
                 onAddCash={() => onAddCash(account.id)}
+                onAddProperty={() => onAddProperty(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />

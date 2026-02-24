@@ -61,6 +61,8 @@ const ASSET_TYPE_COLORS: Record<AssetType, Color.ColorLike> = {
   [AssetType.OPTION]: Color.Red,
   [AssetType.FUTURE]: Color.Red,
   [AssetType.CASH]: Color.Green,
+  [AssetType.MORTGAGE]: Color.Orange,
+  [AssetType.OWNED_PROPERTY]: Color.Orange,
   [AssetType.UNKNOWN]: Color.SecondaryText,
 };
 
@@ -77,6 +79,8 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.OPTION]: Icon.Switch,
   [AssetType.FUTURE]: Icon.Calendar,
   [AssetType.CASH]: Icon.BankNote,
+  [AssetType.MORTGAGE]: Icon.House,
+  [AssetType.OWNED_PROPERTY]: Icon.House,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 

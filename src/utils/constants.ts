@@ -23,6 +23,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.CRYPTO]: "Crypto",
   [AccountType.CURRENT_ACCOUNT]: "Current Account",
   [AccountType.SAVINGS_ACCOUNT]: "Savings Account",
+  [AccountType.PROPERTY]: "🏡 Property",
   [AccountType.OTHER]: "Other",
 };
 
@@ -40,6 +41,7 @@ export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
   [AccountType.CRYPTO]: Color.Red,
   [AccountType.CURRENT_ACCOUNT]: Color.Yellow,
   [AccountType.SAVINGS_ACCOUNT]: Color.Green,
+  [AccountType.PROPERTY]: Color.Orange,
   [AccountType.OTHER]: Color.SecondaryText,
 };
 
@@ -58,6 +60,8 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   [AssetType.OPTION]: "Option",
   [AssetType.FUTURE]: "Future",
   [AssetType.CASH]: "Cash",
+  [AssetType.MORTGAGE]: "Mortgage Property",
+  [AssetType.OWNED_PROPERTY]: "Owned Outright",
   [AssetType.UNKNOWN]: "Unknown",
 };
 
@@ -132,6 +136,10 @@ export const CACHE_PREFIX = {
   PRICE: "price",
   /** Daily FX rate cache: `fx:{from}:{to}:{YYYY-MM-DD}` */
   FX_RATE: "fx",
+  /** HPI cache: `hpi:{region}:{YYYY-MM}` (monthly data, checked daily) */
+  HPI: "hpi",
+  /** Postcode-to-region mapping cache: `postcode-region:{postcode}` (stable, no date) */
+  POSTCODE_REGION: "postcode-region",
 } as const;
 
 /** Cache capacity in bytes (5 MB — well within Raycast's 10 MB default) */

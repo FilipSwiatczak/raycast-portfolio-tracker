@@ -45,7 +45,7 @@
 
 import React from "react";
 import { Color, Icon, List } from "@raycast/api";
-import { PositionValuation, AssetType } from "../utils/types";
+import { PositionValuation, AssetType, isPropertyAssetType } from "../utils/types";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -56,6 +56,7 @@ import {
   hasCustomName,
 } from "../utils/formatting";
 import { ASSET_TYPE_LABELS, COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
+import { calculateCurrentEquity, getCurrentPrincipalInterestRatio } from "../services/mortgage-calculator";
 
 // ──────────────────────────────────────────
 // Props
@@ -95,6 +96,8 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.OPTION]: Icon.Switch,
   [AssetType.FUTURE]: Icon.Calendar,
   [AssetType.CASH]: Icon.BankNote,
+  [AssetType.MORTGAGE]: Icon.House,
+  [AssetType.OWNED_PROPERTY]: Icon.House,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 
@@ -116,13 +119,17 @@ export function PositionListItem({
   const icon = ASSET_TYPE_ICONS[position.assetType] ?? Icon.QuestionMarkCircle;
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
   const isCash = position.assetType === AssetType.CASH;
+  const isProperty = isPropertyAssetType(position.assetType);
   const displayName = getDisplayName(position);
   const isRenamed = hasCustomName(position);
 
   const isCrossCurrency = position.currency !== baseCurrency;
   const hasPrice = currentPrice > 0;
 
-  // Change colour (always neutral for cash since change is 0)
+  // Change colour:
+  // - Cash: always neutral (change is 0)
+  // - Property: uses HPI change since valuation (can be positive/negative)
+  // - Regular: daily market change
   const changeColor = isCash
     ? COLOR_NEUTRAL
     : changePercent > 0
@@ -136,7 +143,17 @@ export function PositionListItem({
   // Include symbol, type, and currency for broad searchability.
 
   // Include both display name and original name so filtering works with either.
-  const keywords = [position.symbol, accountName, typeLabel, position.currency, position.name, displayName, "cash"];
+  // Property positions also include "property", "mortgage", and postcode.
+  const keywords = [
+    position.symbol,
+    accountName,
+    typeLabel,
+    position.currency,
+    position.name,
+    displayName,
+    "cash",
+    ...(isProperty ? ["property", "mortgage", "house", position.mortgageData?.postcode ?? ""] : []),
+  ];
 
   // ── Mode-Specific Rendering ──
 
@@ -146,6 +163,7 @@ export function PositionListItem({
       icon,
       typeLabel,
       isCash,
+      isProperty,
       hasPrice,
       currentPrice,
       totalNativeValue,
@@ -167,6 +185,7 @@ export function PositionListItem({
     position,
     icon,
     isCash,
+    isProperty,
     hasPrice,
     currentPrice,
     totalBaseValue,
@@ -188,6 +207,7 @@ interface ListModeProps {
   position: PositionValuation["position"];
   icon: Icon;
   isCash: boolean;
+  isProperty: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalBaseValue: number;
@@ -223,6 +243,7 @@ function renderListMode({
   position,
   icon,
   isCash,
+  isProperty,
   hasPrice,
   currentPrice,
   totalBaseValue,
@@ -240,7 +261,9 @@ function renderListMode({
 
   const subtitle = isCash
     ? `${position.currency} · ${formatCurrency(position.units, position.currency)}`
-    : `${position.symbol} · ${formatUnits(position.units)} units`;
+    : isProperty
+      ? `${position.mortgageData?.postcode ?? position.symbol} · ${position.assetType === AssetType.MORTGAGE ? "Mortgage" : "Owned"}`
+      : `${position.symbol} · ${formatUnits(position.units)} units`;
 
   // ── Accessories ──
 
@@ -305,6 +328,7 @@ interface DetailModeProps {
   icon: Icon;
   typeLabel: string;
   isCash: boolean;
+  isProperty: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalNativeValue: number;
@@ -345,6 +369,7 @@ function renderDetailMode({
   icon,
   typeLabel,
   isCash,
+  isProperty,
   hasPrice,
   currentPrice,
   totalNativeValue,
@@ -368,6 +393,11 @@ function renderDetailMode({
 
   if (isCash) {
     subtitle = `${position.currency} · ${formatCurrency(position.units, position.currency)}`;
+  } else if (isProperty) {
+    const subtitleParts = [position.mortgageData?.postcode ?? position.symbol];
+    subtitleParts.push(formatPercent(changePercent));
+    subtitleParts.push(`${formatCurrencyCompact(totalBaseValue, baseCurrency)} equity`);
+    subtitle = subtitleParts.join(" · ");
   } else {
     const subtitleParts = [position.symbol];
     if (hasPrice) {
@@ -382,22 +412,35 @@ function renderDetailMode({
 
   const detail = isCash
     ? buildCashDetail({ position, typeLabel, totalNativeValue, totalBaseValue, fxRate, isCrossCurrency, baseCurrency })
-    : buildSecuritiesDetail({
-        position,
-        typeLabel,
-        hasPrice,
-        currentPrice,
-        totalNativeValue,
-        totalBaseValue,
-        change,
-        changePercent,
-        changeColor,
-        fxRate,
-        isCrossCurrency,
-        baseCurrency,
-        displayName,
-        isRenamed,
-      });
+    : isProperty
+      ? buildPropertyDetail({
+          position,
+          typeLabel,
+          totalBaseValue,
+          changePercent,
+          changeColor,
+          fxRate,
+          isCrossCurrency,
+          baseCurrency,
+          displayName,
+          isRenamed,
+        })
+      : buildSecuritiesDetail({
+          position,
+          typeLabel,
+          hasPrice,
+          currentPrice,
+          totalNativeValue,
+          totalBaseValue,
+          change,
+          changePercent,
+          changeColor,
+          fxRate,
+          isCrossCurrency,
+          baseCurrency,
+          displayName,
+          isRenamed,
+        });
 
   return (
     <List.Item
@@ -471,6 +514,159 @@ function buildCashDetail({
           <List.Item.Detail.Metadata.Separator />
 
           {/* ── Metadata ── */}
+          <List.Item.Detail.Metadata.Label title="Added" text={formatDate(position.addedAt)} />
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+/**
+ * Builds the detail panel for a property position (MORTGAGE or OWNED_PROPERTY).
+ *
+ * Shows: property name, type, postcode, valuation date, property value,
+ * equity breakdown (original + principal repaid + appreciation), HPI change,
+ * outstanding mortgage balance, and optional mortgage payment split.
+ */
+function buildPropertyDetail({
+  position,
+  typeLabel,
+  totalBaseValue,
+  changePercent,
+  changeColor,
+  fxRate,
+  isCrossCurrency,
+  baseCurrency,
+  displayName,
+  isRenamed,
+}: {
+  position: PositionValuation["position"];
+  typeLabel: string;
+  totalBaseValue: number;
+  changePercent: number;
+  changeColor: Color;
+  fxRate: number;
+  isCrossCurrency: boolean;
+  baseCurrency: string;
+  displayName: string;
+  isRenamed: boolean;
+}): React.JSX.Element {
+  const md = position.mortgageData;
+
+  // Compute equity breakdown for display
+  const equityCalc = md ? calculateCurrentEquity(md, changePercent) : null;
+  const piRatio = md ? getCurrentPrincipalInterestRatio(md) : null;
+
+  return (
+    <List.Item.Detail
+      metadata={
+        <List.Item.Detail.Metadata>
+          {/* ── Property Info ── */}
+          <List.Item.Detail.Metadata.Label title="Property" text={displayName} />
+          {isRenamed && (
+            <List.Item.Detail.Metadata.Label
+              title="Original Name"
+              text={{ value: position.name, color: Color.SecondaryText }}
+            />
+          )}
+          <List.Item.Detail.Metadata.TagList title="Type">
+            <List.Item.Detail.Metadata.TagList.Item text={typeLabel} />
+          </List.Item.Detail.Metadata.TagList>
+          {md && <List.Item.Detail.Metadata.Label title="Postcode" text={md.postcode} />}
+
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Property Value & Equity ── */}
+          {md && equityCalc && (
+            <>
+              <List.Item.Detail.Metadata.Label
+                title="Property Value (estimated)"
+                text={formatCurrency(equityCalc.currentPropertyValue, position.currency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="Original Valuation"
+                text={formatCurrency(md.totalPropertyValue, position.currency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="HPI Change"
+                text={{
+                  value: formatPercent(changePercent),
+                  color: changeColor,
+                }}
+              />
+
+              <List.Item.Detail.Metadata.Separator />
+
+              <List.Item.Detail.Metadata.Label
+                title="Current Equity"
+                text={formatCurrency(equityCalc.currentEquity, position.currency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="Original Equity"
+                text={formatCurrency(equityCalc.originalEquity, position.currency)}
+              />
+              {equityCalc.principalRepaid > 0 && (
+                <List.Item.Detail.Metadata.Label
+                  title="Principal Repaid"
+                  text={{
+                    value: `+${formatCurrency(equityCalc.principalRepaid, position.currency)}`,
+                    color: COLOR_POSITIVE,
+                  }}
+                />
+              )}
+              {equityCalc.appreciation !== 0 && (
+                <List.Item.Detail.Metadata.Label
+                  title="Market Appreciation"
+                  text={{
+                    value: formatCurrency(equityCalc.appreciation, position.currency, { showSign: true }),
+                    color: equityCalc.appreciation > 0 ? COLOR_POSITIVE : COLOR_NEGATIVE,
+                  }}
+                />
+              )}
+              {equityCalc.outstandingBalance > 0 && (
+                <List.Item.Detail.Metadata.Label
+                  title="Outstanding Mortgage"
+                  text={formatCurrency(equityCalc.outstandingBalance, position.currency)}
+                />
+              )}
+            </>
+          )}
+
+          {/* ── FX Conversion (if cross-currency) ── */}
+          {isCrossCurrency && (
+            <>
+              <List.Item.Detail.Metadata.Separator />
+              <List.Item.Detail.Metadata.Label
+                title={`Equity (${baseCurrency})`}
+                text={formatCurrency(totalBaseValue, baseCurrency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="FX Rate"
+                text={`1 ${position.currency} = ${fxRate.toFixed(4)} ${baseCurrency}`}
+              />
+            </>
+          )}
+
+          {/* ── Mortgage Payment Split ── */}
+          {piRatio && (
+            <>
+              <List.Item.Detail.Metadata.Separator />
+              <List.Item.Detail.Metadata.Label
+                title="Monthly Payment"
+                text={formatCurrency(piRatio.monthlyPayment, position.currency)}
+              />
+              <List.Item.Detail.Metadata.Label
+                title="Payment Split"
+                text={`${piRatio.principalPercent.toFixed(0)}% principal · ${piRatio.interestPercent.toFixed(0)}% interest`}
+              />
+            </>
+          )}
+
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Metadata ── */}
+          <List.Item.Detail.Metadata.Label title="Currency" text={position.currency} />
+          {md && <List.Item.Detail.Metadata.Label title="Valuation Date" text={formatDate(md.valuationDate)} />}
           <List.Item.Detail.Metadata.Label title="Added" text={formatDate(position.addedAt)} />
         </List.Item.Detail.Metadata>
       }

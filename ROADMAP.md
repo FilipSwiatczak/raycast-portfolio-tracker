@@ -1,4 +1,4 @@
-## PHASE 1 continued
+## PHASE 1: MVP (Completed)
 
 1. Base functionality: accounts, positions, apis, raycast front-end ✅
 2. Prettify the UI and UX (this is a conversation mode - I'll describe in detail, back and forth with hot-reloads) ✅
@@ -7,7 +7,7 @@
 5. Add a github pipeline for unit testing and linting, with separate PR branch and main treatment. ✅
 6. Fix "Add Position", where after adding, the context returns to search, leading user to believe the next search would add another position. This is a good flow overall. However the next search and "Add" in fact overwrites the previous position. Keep the flow but fix so that the next search Add adds a new position. ✅
 
-## PHASE 2
+## PHASE 2: FIRE (In Progress)
 
 1. FIRE Dashboard — Financial Independence, Retire Early tracking. Separate command. 🔧
    - Setup form: target value (with spending calculator helper), withdrawal rate, inflation, growth rate, year of birth, holiday entitlement, SIPP access age, account exclusion ✅
@@ -25,12 +25,12 @@
 3. Manage Contributions: add Edit contribution. Currently only Add and Delete. (FireDashboard.tsx line 417) ✅
 4. At the top of the FIRE Dashboard, when it says you're on track, it currently checks for 30 years flat. It should, in the initial FIRE screen, and on fire settings, have a field at the top to ask for Target FIRE age OR Target FIRE year. Calculations proceed as usual unaffected just the top then display on target or not for that amount. ✅
 5. Fix "Search Investments" not to assume an Account but start search without account selected, then on found entry move to another sceen to add to account -> select account (with option to add new account) -> confirm asset details (with option to edit name, units, price) -> add position. ✅
-6. Add Mortgage handling as an asset class. On addition ask for Total Value, Current Equity, date of valuation and post code. Create a service to fetch the price percentage change since valuation date based on the postcode (using a property price index).
+6. Add Property handling (Including Mortgage) as an asset class. On addition ask for Total Value, Current Equity, date of valuation and post code. Create a service to fetch the price percentage change since valuation date based on the postcode (using a property price index). ✅
 7. Add Import/Export functionality. Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, and last updated date. Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column. 🔧
 8. Fix Portfolio Tracker "Day Change" showing as "+0.01%" where it should be "+1%" it's display 0.0X and then not mutplying by 100
 9. Fee Tracking: Add entry for fees on Account level and on each Position level. This is a new option in the Portfolio Tracker when editing and adding accounts and positions. Check the Yahoo API response it it includes asset type for Position (only ETFs attract annual fees). It's % based, anually. FIRE setting then have an option to "Adjust growth for Account Fees" and "Adjust growth for ETF Fees" which are ON by default. When ON, FIRE SVG chart calculations subtract a sum of (account fee + position fee) from the growth rate (negative possible). Then a new SVG Chart ("Fee Tracking") is present showing the total sum of all fees (bar stacked with two values: account fees and ETF fees) shown over time, with same format at the other SVGs.
 
-## PHASE 3
+## PHASE 3: Coast FIRE and Portfolio Analytics (Future)
 
 1. Add Coast FIRE mode as a selectable option from a dropdown in the top right of the FIRE Dashboard. This mode adds two inputs and a section to FIRE settings called "Coast Fire". It takes two mutually exclusive parameters, either "Years till Coast FIRE" or "Coast Retirement target year". The COAST idea is to stop having to contribute to portfolio growth (allowing for part time or lighter income stream). Users will want to find out when they can start Coasting given a specified retirement target, or conversely, given a specified Coast target, when they can stop contributing and start coasting. The projection engine will need to be adapted to calculate the Coast target value based on the specified retirement year and assumptions, or calculate the Coast FIRE year based on the specified target value and assumptions. The dashboard will also need to be adapted to display the Coast target line on the chart and include relevant metadata in the panel. 🔧 techically this is a combination of projections with and without contributions (I guess calculate the contribution-less growth vector for each year of standard display, then check the earlier date that matches or exceeds the target budget - you might have a better/smarter way to handle this).
 2. Add portfolio graph over time. Separate command. Two displays: Line chart with adjustable time frame (both range and granularity(day, week:default, month, year)) showing the total asset value over time. Second graph showing same broken into a data series (line) for each account. Without pulling backdated asset valuation, with initial portfolio, this will be a single dot line on the graph - this is fine for this stage.

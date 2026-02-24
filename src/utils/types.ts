@@ -46,6 +46,7 @@ export enum AccountType {
   CRYPTO = "CRYPTO",
   CURRENT_ACCOUNT = "CURRENT ACCOUNT",
   SAVINGS_ACCOUNT = "SAVINGS ACCOUNT",
+  PROPERTY = "PROPERTY",
   OTHER = "OTHER",
 }
 
@@ -61,7 +62,17 @@ export function isLockedAccountType(type: AccountType): boolean {
   return type === AccountType.SIPP || type === AccountType._401K;
 }
 
-/** Asset type as returned by Yahoo Finance (plus CASH for cash holdings) */
+/**
+ * Returns true if the account type is a property account.
+ * Property accounts hold MORTGAGE or OWNED_PROPERTY positions
+ * and are excluded from FIRE calculations by default (primary
+ * residence is not typically counted toward FIRE net worth).
+ */
+export function isPropertyAccountType(type: AccountType): boolean {
+  return type === AccountType.PROPERTY;
+}
+
+/** Asset type as returned by Yahoo Finance (plus CASH, MORTGAGE, OWNED_PROPERTY for non-traded holdings) */
 export enum AssetType {
   EQUITY = "EQUITY",
   ETF = "ETF",
@@ -73,7 +84,20 @@ export enum AssetType {
   FUTURE = "FUTURE",
   /** Cash holding — not a traded instrument. Price is always 1.0 per unit of its currency. */
   CASH = "CASH",
+  /** Property with an active mortgage. Value = equity adjusted for HPI appreciation + principal repayment. */
+  MORTGAGE = "MORTGAGE",
+  /** Property owned outright (no mortgage). Value = total property value adjusted for HPI appreciation. */
+  OWNED_PROPERTY = "OWNED_PROPERTY",
   UNKNOWN = "UNKNOWN",
+}
+
+/**
+ * Returns true if the asset type represents a property holding
+ * (mortgage or owned outright). Property positions use HPI data
+ * for valuation rather than Yahoo Finance quotes.
+ */
+export function isPropertyAssetType(type: AssetType): boolean {
+  return type === AssetType.MORTGAGE || type === AssetType.OWNED_PROPERTY;
 }
 
 /** Classifies errors for display and retry logic */
@@ -84,6 +108,67 @@ export enum ErrorType {
   API_ERROR = "API_ERROR",
   /** Unexpected / unknown errors */
   UNKNOWN = "UNKNOWN",
+}
+
+// ──────────────────────────────────────────
+// Property / Mortgage Data
+// ──────────────────────────────────────────
+
+/**
+ * Additional data stored on MORTGAGE and OWNED_PROPERTY positions.
+ *
+ * For OWNED_PROPERTY, `equity` always equals `totalPropertyValue` and
+ * the mortgage-specific fields (`mortgageRate`, `mortgageTerm`,
+ * `mortgageStartDate`) are omitted.
+ *
+ * For MORTGAGE, if the three optional mortgage detail fields are all
+ * provided, the system calculates cumulative principal repayment since
+ * valuation and adds it to equity before applying HPI appreciation.
+ */
+export interface MortgageData {
+  /** Full property value at the time of valuation (e.g. £350,000) */
+  totalPropertyValue: number;
+
+  /** User's equity stake at the time of valuation (e.g. £100,000) */
+  equity: number;
+
+  /** ISO 8601 date string of the last valuation (e.g. "2023-06-15") */
+  valuationDate: string;
+
+  /** UK postcode used for HPI region lookup (e.g. "SW1A 1AA") */
+  postcode: string;
+
+  /**
+   * Annual mortgage interest rate as a percentage (e.g. 4.5 means 4.5%).
+   * Optional — when provided with `mortgageTerm` and `mortgageStartDate`,
+   * enables principal repayment tracking.
+   */
+  mortgageRate?: number;
+
+  /**
+   * Total mortgage term in years (e.g. 25).
+   * Optional — part of the principal tracking triple.
+   */
+  mortgageTerm?: number;
+
+  /**
+   * ISO 8601 date string when the mortgage started (e.g. "2020-01-15").
+   * Optional — part of the principal tracking triple.
+   */
+  mortgageStartDate?: string;
+}
+
+/**
+ * Returns true if the mortgage data has all three optional fields needed
+ * to calculate principal repayment (rate, term, and start date).
+ */
+export function hasMortgageRepaymentData(data: MortgageData): boolean {
+  return (
+    typeof data.mortgageRate === "number" &&
+    typeof data.mortgageTerm === "number" &&
+    typeof data.mortgageStartDate === "string" &&
+    data.mortgageStartDate.length > 0
+  );
 }
 
 // ──────────────────────────────────────────
@@ -116,6 +201,11 @@ export interface Position {
    * When set, this should take precedence over live quotes.
    */
   priceOverride?: number;
+  /**
+   * Additional data for MORTGAGE and OWNED_PROPERTY positions.
+   * Undefined for all other asset types.
+   */
+  mortgageData?: MortgageData;
   /** ISO 8601 timestamp when this position was added */
   addedAt: string;
 }

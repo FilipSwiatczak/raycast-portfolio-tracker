@@ -45,6 +45,7 @@ import { useState } from "react";
 import { Form, ActionPanel, Action, Icon } from "@raycast/api";
 import { Account } from "../utils/types";
 import { FireSettings, FIRE_DEFAULTS } from "../utils/fire-types";
+import { isPropertyAccountType } from "../utils/types";
 import { calculateFireNumber } from "../services/fire-calculator";
 import { ACCOUNT_TYPE_LABELS } from "../utils/constants";
 
@@ -133,7 +134,17 @@ export function FireSetup({
     sippAccessAge: (settings?.sippAccessAge ?? FIRE_DEFAULTS.sippAccessAge).toString(),
     targetFireAge: settings?.targetFireAge?.toString() ?? "",
     targetFireYear: settings?.targetFireYear?.toString() ?? "",
-    includedAccountIds: accounts.filter((a) => !(settings?.excludedAccountIds ?? []).includes(a.id)).map((a) => a.id),
+    includedAccountIds: accounts
+      .filter((a) => {
+        // If editing existing settings, respect the saved exclusion list
+        if (settings) {
+          return !settings.excludedAccountIds.includes(a.id);
+        }
+        // On first setup (no settings), exclude Property accounts by default.
+        // Primary residence is not typically counted toward FIRE net worth.
+        return !isPropertyAccountType(a.type);
+      })
+      .map((a) => a.id),
   };
 
   // ── Validation Helpers ──

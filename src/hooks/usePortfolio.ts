@@ -34,7 +34,15 @@
 import { useCallback } from "react";
 import { showToast, Toast } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { Portfolio, Account, Position, AccountType, AssetType } from "../utils/types";
+import {
+  Portfolio,
+  Account,
+  Position,
+  AccountType,
+  AssetType,
+  MortgageData,
+  isPropertyAssetType,
+} from "../utils/types";
 import { loadPortfolio, savePortfolio } from "../utils/storage";
 import { getDisplayName } from "../utils/formatting";
 import { generateId } from "../utils/uuid";
@@ -80,6 +88,21 @@ export interface UsePortfolioReturn {
 
   /** Updates the units of an existing position */
   updatePosition: (accountId: string, positionId: string, units: number) => Promise<void>;
+
+  /**
+   * Updates a property position's mortgage data, asset type, and/or name.
+   * Used by EditMortgageForm to persist changes to MORTGAGE / OWNED_PROPERTY positions.
+   */
+  updatePropertyPosition: (
+    accountId: string,
+    positionId: string,
+    updates: {
+      name?: string;
+      customName?: string;
+      assetType?: AssetType;
+      mortgageData?: MortgageData;
+    },
+  ) => Promise<void>;
 
   /** Sets a custom display name for a position (rename) */
   renamePosition: (accountId: string, positionId: string, customName: string) => Promise<void>;
@@ -277,6 +300,7 @@ export function usePortfolio(): UsePortfolioReturn {
         currency: string;
         assetType: AssetType;
         priceOverride?: number;
+        mortgageData?: MortgageData;
       },
     ): Promise<Position> => {
       const newPosition: Position = {
@@ -287,6 +311,7 @@ export function usePortfolio(): UsePortfolioReturn {
         currency: params.currency,
         assetType: params.assetType,
         priceOverride: params.priceOverride,
+        ...(params.mortgageData && { mortgageData: params.mortgageData }),
         addedAt: new Date().toISOString(),
       };
 
@@ -371,6 +396,69 @@ export function usePortfolio(): UsePortfolioReturn {
         style: Toast.Style.Success,
         title: "Position Updated",
         message: `Units set to ${units}`,
+      });
+    },
+    [mutate],
+  );
+
+  const updatePropertyPosition = useCallback(
+    async (
+      accountId: string,
+      positionId: string,
+      updates: {
+        name?: string;
+        customName?: string;
+        assetType?: AssetType;
+        mortgageData?: MortgageData;
+      },
+    ): Promise<void> => {
+      const applyUpdates = (pos: Position): Position => {
+        if (pos.id !== positionId) return pos;
+        return {
+          ...pos,
+          ...(updates.name !== undefined && { name: updates.name }),
+          ...(updates.customName !== undefined ? { customName: updates.customName } : {}),
+          ...(updates.assetType !== undefined && { assetType: updates.assetType }),
+          ...(updates.mortgageData !== undefined && { mortgageData: updates.mortgageData }),
+          // Update symbol if postcode changed and it's a property type
+          ...(updates.mortgageData?.postcode && isPropertyAssetType(updates.assetType ?? pos.assetType)
+            ? { symbol: `PROPERTY:${updates.mortgageData.postcode.replace(/\s+/g, "").toUpperCase()}` }
+            : {}),
+        };
+      };
+
+      await mutate(
+        (async () => {
+          const current = await loadPortfolio();
+          const updated: Portfolio = {
+            ...current,
+            accounts: current.accounts.map((account) =>
+              account.id === accountId ? { ...account, positions: account.positions.map(applyUpdates) } : account,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: currentData.accounts.map((account) =>
+                account.id === accountId ? { ...account, positions: account.positions.map(applyUpdates) } : account,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+
+      const posName = updates.customName ?? updates.name ?? "Property";
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Property Updated",
+        message: posName,
       });
     },
     [mutate],
@@ -679,6 +767,7 @@ export function usePortfolio(): UsePortfolioReturn {
 
     addPosition,
     updatePosition,
+    updatePropertyPosition,
     renamePosition,
     restorePositionName,
     batchRenamePositions,
