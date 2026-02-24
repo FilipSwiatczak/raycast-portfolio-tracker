@@ -96,6 +96,8 @@ function isValidFireSettings(data: unknown): data is FireSettings {
     typeof obj.yearOfBirth === "number" &&
     typeof obj.holidayEntitlement === "number" &&
     typeof obj.sippAccessAge === "number" &&
+    (obj.targetFireAge === undefined || obj.targetFireAge === null || typeof obj.targetFireAge === "number") &&
+    (obj.targetFireYear === undefined || obj.targetFireYear === null || typeof obj.targetFireYear === "number") &&
     Array.isArray(obj.excludedAccountIds) &&
     Array.isArray(obj.contributions) &&
     typeof obj.updatedAt === "string"

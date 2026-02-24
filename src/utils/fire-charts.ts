@@ -147,7 +147,27 @@ export function buildDashboardMarkdown(
   lines.push("");
 
   // ── Status message ──
-  if (projection.targetHitInWindow) {
+  const targetYearFromAge = settings.targetFireAge ? settings.yearOfBirth + settings.targetFireAge : null;
+  const targetYear = settings.targetFireYear ?? targetYearFromAge ?? null;
+  const targetLabel = settings.targetFireYear
+    ? `target year **${settings.targetFireYear}**`
+    : settings.targetFireAge
+      ? `target age **${settings.targetFireAge}**`
+      : null;
+
+  if (targetYear) {
+    if (projection.fireYear !== null && projection.fireYear <= targetYear) {
+      lines.push(
+        `> **On track!** You're projected to reach financial independence in **${projection.fireYear}** (age ${projection.fireAge}), meeting your ${targetLabel}.`,
+      );
+    } else if (projection.fireYear !== null) {
+      lines.push(
+        `> ⚠️ **Not on track for your ${targetLabel}.** Projected FIRE year is **${projection.fireYear}** (age ${projection.fireAge}).`,
+      );
+    } else {
+      lines.push(`> ⚠️ **Not on track for your ${targetLabel}.** Target not reached within the projection window.`);
+    }
+  } else if (projection.targetHitInWindow) {
     lines.push(
       `> **On track!** At current rates you'll reach financial independence in **${projection.fireYear}** (age ${projection.fireAge}).`,
     );

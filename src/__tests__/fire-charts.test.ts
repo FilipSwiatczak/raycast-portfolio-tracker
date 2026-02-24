@@ -972,6 +972,23 @@ describe("buildDashboardMarkdown", () => {
     expect(md).toContain("age 43");
   });
 
+  it("uses target FIRE age messaging when set and on track", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const settings = { ...testSettings, targetFireAge: 50 };
+    const { markdown: md } = buildDashboardMarkdown(projection, settings, "GBP", []);
+    expect(md).toContain("On track!");
+    expect(md).toContain("meeting your target age **50**");
+  });
+
+  it("uses target FIRE year messaging when set and not on track", () => {
+    const projection = makeProjection({ targetHit: true, fireYear: 2033, fireAge: 43 });
+    const settings = { ...testSettings, targetFireYear: 2028 };
+    const { markdown: md } = buildDashboardMarkdown(projection, settings, "GBP", []);
+    expect(md).toContain("Not on track for your target year **2028**");
+    expect(md).toContain("2033");
+    expect(md).toContain("age 43");
+  });
+
   it("shows warning message when target is not hit", () => {
     const projection = makeProjection({ targetHit: false });
     const { markdown: md } = buildDashboardMarkdown(projection, testSettings, "GBP", []);

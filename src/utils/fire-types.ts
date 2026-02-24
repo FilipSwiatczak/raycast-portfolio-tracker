@@ -63,6 +63,12 @@ export interface FireSettings {
   /** Age at which SIPP / pension becomes accessible (default 57 in UK, rising to 58). */
   sippAccessAge: number;
 
+  /** Optional target FIRE age (mutually exclusive with targetFireYear). */
+  targetFireAge?: number | null;
+
+  /** Optional target FIRE calendar year (mutually exclusive with targetFireAge). */
+  targetFireYear?: number | null;
+
   /** Account IDs excluded from the FIRE portfolio value calculation. */
   excludedAccountIds: string[];
 

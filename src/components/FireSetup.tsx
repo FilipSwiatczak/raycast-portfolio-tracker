@@ -117,6 +117,8 @@ export function FireSetup({
   const [birthYearError, setBirthYearError] = useState<string | undefined>();
   const [holidayError, setHolidayError] = useState<string | undefined>();
   const [sippError, setSippError] = useState<string | undefined>();
+  const [targetAgeError, setTargetAgeError] = useState<string | undefined>();
+  const [targetYearError, setTargetYearError] = useState<string | undefined>();
 
   // ── Default values for form fields ──
 
@@ -129,6 +131,8 @@ export function FireSetup({
     yearOfBirth: settings?.yearOfBirth?.toString() ?? "",
     holidayEntitlement: (settings?.holidayEntitlement ?? FIRE_DEFAULTS.holidayEntitlement).toString(),
     sippAccessAge: (settings?.sippAccessAge ?? FIRE_DEFAULTS.sippAccessAge).toString(),
+    targetFireAge: settings?.targetFireAge?.toString() ?? "",
+    targetFireYear: settings?.targetFireYear?.toString() ?? "",
     includedAccountIds: accounts.filter((a) => !(settings?.excludedAccountIds ?? []).includes(a.id)).map((a) => a.id),
   };
 
@@ -183,6 +187,8 @@ export function FireSetup({
     yearOfBirth: string;
     holidayEntitlement: string;
     sippAccessAge: string;
+    targetFireAge: string;
+    targetFireYear: string;
     includedAccountIds: string[];
   }) {
     // ── Parse withdrawal rate first (needed for FIRE number calc) ──
@@ -253,6 +259,38 @@ export function FireSetup({
       return;
     }
 
+    const hasTargetAge = values.targetFireAge.trim().length > 0;
+    const hasTargetYear = values.targetFireYear.trim().length > 0;
+
+    let targetFireAge: number | null = null;
+    let targetFireYear: number | null = null;
+
+    if (hasTargetAge && hasTargetYear) {
+      const msg = "Choose either Target FIRE age or Target FIRE year";
+      setTargetAgeError(msg);
+      setTargetYearError(msg);
+      return;
+    }
+
+    if (hasTargetAge) {
+      const ageErr = validateInteger(values.targetFireAge, "Target FIRE age", 30, 100);
+      if (ageErr) {
+        setTargetAgeError(ageErr);
+        return;
+      }
+      targetFireAge = Number(values.targetFireAge.trim());
+    }
+
+    if (hasTargetYear) {
+      const currentYear = new Date().getFullYear();
+      const yearErr = validateInteger(values.targetFireYear, "Target FIRE year", currentYear, currentYear + 100);
+      if (yearErr) {
+        setTargetYearError(yearErr);
+        return;
+      }
+      targetFireYear = Number(values.targetFireYear.trim());
+    }
+
     // ── Build settings object ──
 
     const allAccountIds = accounts.map((a) => a.id);
@@ -266,6 +304,8 @@ export function FireSetup({
       yearOfBirth: Number(values.yearOfBirth.trim()),
       holidayEntitlement: Number(values.holidayEntitlement.trim()),
       sippAccessAge: Number(values.sippAccessAge.trim()),
+      targetFireAge,
+      targetFireYear,
       excludedAccountIds,
       contributions: settings?.contributions ?? [],
       updatedAt: new Date().toISOString(),
@@ -315,6 +355,48 @@ export function FireSetup({
       )}
 
       <Form.Description title="Current Portfolio" text={portfolioDisplay} />
+
+      <Form.Separator />
+
+      {/* ── Target Timeline ── */}
+      <Form.Description
+        title="Target Timeline"
+        text="Optionally set a target FIRE age or target FIRE year to gauge if you're on track. Leave blank to use the default projection window."
+      />
+
+      <Form.TextField
+        id="targetFireAge"
+        title="Target FIRE Age"
+        placeholder="e.g. 50"
+        defaultValue={defaults.targetFireAge}
+        error={targetAgeError}
+        onChange={() => {
+          if (targetAgeError) {
+            setTargetAgeError(undefined);
+          }
+          if (targetYearError) {
+            setTargetYearError(undefined);
+          }
+        }}
+        info="Choose either a target age or a target year — not both."
+      />
+
+      <Form.TextField
+        id="targetFireYear"
+        title="Target FIRE Year"
+        placeholder="e.g. 2045"
+        defaultValue={defaults.targetFireYear}
+        error={targetYearError}
+        onChange={() => {
+          if (targetYearError) {
+            setTargetYearError(undefined);
+          }
+          if (targetAgeError) {
+            setTargetAgeError(undefined);
+          }
+        }}
+        info="Choose either a target year or a target age — not both."
+      />
 
       <Form.Separator />
 
