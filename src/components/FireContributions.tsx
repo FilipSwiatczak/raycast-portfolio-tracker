@@ -1,7 +1,7 @@
 /**
  * FireContributions component — manage recurring monthly contributions.
  *
- * Uses single-frame rendering to switch between two phases within one
+ * Uses single-frame rendering to switch between multiple phases within one
  * component, keeping the navigation stack stable:
  *
  *   Phase "list" — Shows existing contributions as a List with:
@@ -14,6 +14,11 @@
  *     - Monthly Amount text field
  *     - Position picker (dropdown of positions in included accounts only)
  *     - Submit → adds contribution, switches back to "list" phase
+ *     - Cancel → switches back to "list" phase without saving
+ *
+ *   Phase "edit" — Shows a Form to update an existing contribution:
+ *     - Pre-filled amount + position
+ *     - Submit → updates contribution, switches back to "list" phase
  *     - Cancel → switches back to "list" phase without saving
  *
  * The component never modifies portfolio data. It only reads portfolio
@@ -82,7 +87,7 @@ export interface FireContributionsProps {
 // Phase Type
 // ──────────────────────────────────────────
 
-type Phase = "list" | "add";
+type Phase = "list" | "add" | "edit";
 
 // ──────────────────────────────────────────
 // Currency Symbols (local, no Raycast Color import dependency)
@@ -111,6 +116,7 @@ export function FireContributions({
   doneTitle = "Done",
 }: FireContributionsProps): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>("list");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [localContributions, setLocalContributions] = useState<FireContribution[]>(contributions);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -160,6 +166,8 @@ export function FireContributions({
     return options;
   }, [accounts]);
 
+  const validPositionIds = useMemo(() => new Set(positionOptions.map((opt) => opt.value)), [positionOptions]);
+
   // ── Handlers ──
 
   async function handleAdd(values: { monthlyAmount: string; positionId: string }) {
@@ -194,8 +202,55 @@ export function FireContributions({
       await onSave(updated);
       setLocalContributions(updated);
       setPhase("list");
+      setEditingId(null);
     } catch (error) {
       console.error("Failed to save contribution:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleEdit(contributionId: string) {
+    setEditingId(contributionId);
+    setPhase("edit");
+  }
+
+  async function handleUpdate(values: { monthlyAmount: string; positionId: string }) {
+    if (!editingId) return;
+
+    const amount = Number(values.monthlyAmount.trim());
+    if (isNaN(amount) || amount <= 0) {
+      return;
+    }
+
+    if (!values.positionId) {
+      return;
+    }
+
+    const positionInfo = positionLookup[values.positionId];
+    if (!positionInfo) {
+      return;
+    }
+
+    const updated = localContributions.map((c) =>
+      c.id === editingId
+        ? {
+            ...c,
+            positionId: values.positionId,
+            accountId: positionInfo.accountId,
+            monthlyAmount: amount,
+          }
+        : c,
+    );
+
+    setIsSaving(true);
+    try {
+      await onSave(updated);
+      setLocalContributions(updated);
+      setPhase("list");
+      setEditingId(null);
+    } catch (error) {
+      console.error("Failed to update contribution:", error);
     } finally {
       setIsSaving(false);
     }
@@ -240,14 +295,46 @@ export function FireContributions({
 
   // ── Phase: Add Form ──
 
+  const editingContribution = editingId ? localContributions.find((c) => c.id === editingId) : undefined;
+
   if (phase === "add") {
     return (
       <AddContributionForm
+        title="Add Contribution"
+        submitTitle="Add Contribution"
+        submitIcon={Icon.Plus}
+        descriptionText="Add a recurring monthly contribution to a position."
         positionOptions={positionOptions}
         currencySymbol={currencySymbol}
         isSaving={isSaving}
         onSubmit={handleAdd}
-        onCancel={() => setPhase("list")}
+        onCancel={() => {
+          setPhase("list");
+          setEditingId(null);
+        }}
+      />
+    );
+  }
+
+  if (phase === "edit" && editingContribution) {
+    return (
+      <AddContributionForm
+        title="Edit Contribution"
+        submitTitle="Save Changes"
+        submitIcon={Icon.Pencil}
+        descriptionText="Edit the amount or target position."
+        positionOptions={positionOptions}
+        currencySymbol={currencySymbol}
+        isSaving={isSaving}
+        initialMonthlyAmount={String(editingContribution.monthlyAmount)}
+        initialPositionId={
+          validPositionIds.has(editingContribution.positionId) ? editingContribution.positionId : undefined
+        }
+        onSubmit={handleUpdate}
+        onCancel={() => {
+          setPhase("list");
+          setEditingId(null);
+        }}
       />
     );
   }
@@ -272,7 +359,16 @@ export function FireContributions({
           }
           actions={
             <ActionPanel>
-              {hasPositions && <Action title="Add Contribution" icon={Icon.Plus} onAction={() => setPhase("add")} />}
+              {hasPositions && (
+                <Action
+                  title="Add Contribution"
+                  icon={Icon.Plus}
+                  onAction={() => {
+                    setEditingId(null);
+                    setPhase("add");
+                  }}
+                />
+              )}
               <Action
                 title={doneTitle}
                 icon={doneTitle === "Done" ? Icon.Checkmark : Icon.LineChart}
@@ -324,9 +420,18 @@ export function FireContributions({
                           title="Add Contribution"
                           icon={Icon.Plus}
                           shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
-                          onAction={() => setPhase("add")}
+                          onAction={() => {
+                            setEditingId(null);
+                            setPhase("add");
+                          }}
                         />
                       )}
+                      <Action
+                        title="Edit Contribution"
+                        icon={Icon.Pencil}
+                        shortcut={{ modifiers: ["cmd"], key: "e" }}
+                        onAction={() => handleEdit(contribution.id)}
+                      />
                       <Action
                         title="Remove Contribution"
                         icon={Icon.Trash}
@@ -359,6 +464,10 @@ export function FireContributions({
 // ──────────────────────────────────────────
 
 interface AddContributionFormProps {
+  title: string;
+  submitTitle: string;
+  submitIcon: Icon;
+  descriptionText: string;
   positionOptions: Array<{
     value: string;
     title: string;
@@ -367,6 +476,8 @@ interface AddContributionFormProps {
   }>;
   currencySymbol: string;
   isSaving: boolean;
+  initialMonthlyAmount?: string;
+  initialPositionId?: string;
   onSubmit: (values: { monthlyAmount: string; positionId: string }) => Promise<void>;
   onCancel: () => void;
 }
@@ -378,9 +489,15 @@ interface AddContributionFormProps {
  * to keep the navigation stack stable.
  */
 function AddContributionForm({
+  title,
+  submitTitle,
+  submitIcon,
+  descriptionText,
   positionOptions,
   currencySymbol,
   isSaving,
+  initialMonthlyAmount,
+  initialPositionId,
   onSubmit,
   onCancel,
 }: AddContributionFormProps): React.JSX.Element {
@@ -428,11 +545,11 @@ function AddContributionForm({
 
   return (
     <Form
-      navigationTitle="Add Contribution"
+      navigationTitle={title}
       isLoading={isSaving}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Add Contribution" icon={Icon.Plus} onSubmit={handleFormSubmit} />
+          <Action.SubmitForm title={submitTitle} icon={submitIcon} onSubmit={handleFormSubmit} />
           <Action
             title="Cancel"
             icon={Icon.XMarkCircle}
@@ -442,7 +559,7 @@ function AddContributionForm({
         </ActionPanel>
       }
     >
-      <Form.Description title="New Contribution" text="Add a recurring monthly contribution to a specific position." />
+      <Form.Description title={title} text={descriptionText} />
 
       <Form.TextField
         id="monthlyAmount"
@@ -451,6 +568,7 @@ function AddContributionForm({
         error={amountError}
         onChange={() => amountError && setAmountError(undefined)}
         autoFocus
+        defaultValue={initialMonthlyAmount ?? ""}
         info="The amount you invest into this position every month."
       />
 
@@ -459,6 +577,7 @@ function AddContributionForm({
         title="Position"
         error={positionError}
         onChange={() => positionError && setPositionError(undefined)}
+        defaultValue={initialPositionId ?? ""}
         info="The portfolio position that receives this monthly contribution."
       >
         {Object.entries(accountGroups).map(([accountName, positions]) => (
