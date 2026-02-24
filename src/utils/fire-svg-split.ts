@@ -85,6 +85,9 @@ export interface SplitChartConfig {
   /** Pre-formatted target label */
   targetLabel: string;
 
+  /** Optional target year marker (used for 🎯 on the right-side labels) */
+  targetYear?: number | null;
+
   /** Year when SIPP/pension becomes accessible, or null if never in window */
   sippAccessYear: number | null;
 
@@ -273,7 +276,7 @@ function buildSplitStyleBlock(): string {
 export function buildSplitProjectionSVG(bars: SplitChartBar[], config: SplitChartConfig): string {
   if (bars.length === 0) return "";
 
-  const { targetValue, targetLabel, sippAccessYear, theme, title } = config;
+  const { targetValue, targetLabel, targetYear, sippAccessYear, theme, title } = config;
   const palette = SPLIT_PALETTES[theme];
 
   // ── Dimensions ──
@@ -459,7 +462,14 @@ export function buildSplitProjectionSVG(bars: SplitChartBar[], config: SplitChar
     const y = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
     const cls = bar.isFireYear ? CLS.fire : CLS.muted;
     const color = bar.isFireYear ? palette.fireAccent : palette.mutedText;
-    const suffix = bar.isFireYear ? "  🎯" : "";
+    const markerParts: string[] = [];
+    if (targetYear !== undefined && targetYear !== null && bar.year === targetYear) {
+      markerParts.push("🎯");
+    }
+    if (bar.isFireYear) {
+      markerParts.push("🔥");
+    }
+    const suffix = markerParts.length > 0 ? `  ${markerParts.join(" ")}` : "";
     elements.push(
       `<text class="${cls}" x="${SVG_WIDTH - padRight + 6}" y="${y}" ` +
         `${fillAttr(color)} font-size="${FONT_SIZE_LABEL}" ` +

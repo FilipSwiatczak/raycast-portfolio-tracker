@@ -331,7 +331,7 @@ export function FireDashboard({
           {/* ── FIRE Target Date ── */}
           {projection.targetHitInWindow && (
             <Detail.Metadata.Label
-              title="🎯 FIRE Year"
+              title="🔥 FIRE Year"
               text={{
                 value: String(projection.fireYear),
                 color: Color.Green,

@@ -98,6 +98,9 @@ export interface ChartConfig {
   /** Pre-formatted target label (e.g. "£1.0M") */
   targetLabel: string;
 
+  /** Optional target year marker (used for 🎯 on the right-side labels) */
+  targetYear?: number | null;
+
   /**
    * Raycast appearance hint — sets the inline presentation-attribute
    * fallback colours. The embedded CSS `@media (prefers-color-scheme)`
@@ -424,7 +427,7 @@ function buildThemeStyleBlock(): string {
 export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): string {
   if (bars.length === 0) return "";
 
-  const { targetValue, targetLabel, theme, title } = config;
+  const { targetValue, targetLabel, targetYear, theme, title } = config;
   const palette = PALETTES[theme];
 
   // ── Dimensions ──
@@ -597,7 +600,14 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
     const y = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
     const cls = bar.isFireYear ? CLS.fire : CLS.muted;
     const color = bar.isFireYear ? palette.fireAccent : palette.mutedText;
-    const suffix = bar.isFireYear ? "  🎯" : "";
+    const markerParts: string[] = [];
+    if (targetYear !== undefined && targetYear !== null && bar.year === targetYear) {
+      markerParts.push("🎯");
+    }
+    if (bar.isFireYear) {
+      markerParts.push("🔥");
+    }
+    const suffix = markerParts.length > 0 ? `  ${markerParts.join(" ")}` : "";
     elements.push(
       `<text class="${cls}" x="${SVG_WIDTH - padRight + 6}" y="${y}" ` +
         `${fillAttr(color)} font-size="${FONT_SIZE_LABEL}" ` +

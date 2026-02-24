@@ -610,7 +610,7 @@ describe("buildProjectionSVG", () => {
 
   it("adds FIRE marker emoji on the FIRE year value label", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
-    expect(svg).toContain("🎯");
+    expect(svg).toContain("🔥");
   });
 
   it("contains a legend with Base and Contributions labels", () => {

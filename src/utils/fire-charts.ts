@@ -195,6 +195,7 @@ export function buildDashboardMarkdown(
   const chartConfig: ChartConfig = {
     targetValue: projection.targetValue,
     targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
+    targetYear,
     theme,
     title: "Growth with contributions",
     tooltip: growthSummary,
@@ -221,6 +222,7 @@ export function buildDashboardMarkdown(
       const splitConfig: SplitChartConfig = {
         targetValue: projection.targetValue,
         targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
+        targetYear,
         sippAccessYear:
           sippAccessYear >= projection.years[0].year &&
           sippAccessYear <= projection.years[projection.years.length - 1].year
