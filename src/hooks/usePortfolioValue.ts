@@ -291,22 +291,27 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
           // Calculate current equity using the mortgage calculator
           const equityCalc = calculateCurrentEquity(position.mortgageData, hpiChangePercent);
 
-          // The "value" of a property position is the user's current equity
-          const totalNativeValue = equityCalc.currentEquity;
+          // The "value" of a property position is the user's adjusted equity
+          // (accounts for shared ownership split and reserved equity)
+          const totalNativeValue = equityCalc.adjustedEquity;
           const totalBaseValue = totalNativeValue * fxRate;
 
-          // "Change" represents the HPI change since valuation (not a daily figure)
-          // We express the change as: current equity − original equity at valuation
-          const absoluteChange = equityCalc.currentEquity - equityCalc.originalEquity;
+          // "Change" represents the equity change since valuation.
+          // HPI appreciation is applied to the FULL property value, then reflected
+          // through to equity. The percentage shown is equity-relative, not raw HPI.
+          const absoluteChange = equityCalc.adjustedEquity - equityCalc.originalEquity;
+          const equityChangePercent =
+            equityCalc.originalEquity > 0 ? (absoluteChange / equityCalc.originalEquity) * 100 : hpiChangePercent;
 
           return {
             position,
-            currentPrice: equityCalc.currentEquity, // "price" = equity for display
+            currentPrice: equityCalc.adjustedEquity, // "price" = user's equity for display
             totalNativeValue,
             totalBaseValue,
             change: absoluteChange,
-            changePercent: hpiChangePercent,
+            changePercent: equityChangePercent,
             fxRate,
+            hpiChangePercent, // raw HPI % for the detail panel
           };
         }
 

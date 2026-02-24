@@ -31,6 +31,16 @@ export interface EquityCalculation {
   /** Current total equity = originalEquity + principalRepaid + appreciation */
   currentEquity: number;
 
+  /**
+   * User's adjusted equity after shared ownership split and reserved equity.
+   * Equals `currentEquity` when no shared ownership is configured.
+   *
+   * Formula:
+   *   sharedPool = currentEquity - reservedEquity
+   *   adjustedEquity = (sharedPool × sharedOwnershipPercent / 100) + reservedEquity
+   */
+  adjustedEquity: number;
+
   /** Current estimated property value (totalPropertyValue adjusted for HPI) */
   currentPropertyValue: number;
 
@@ -39,6 +49,12 @@ export interface EquityCalculation {
 
   /** HPI percentage change since valuation (e.g. 4.2 means +4.2%) */
   hpiChangePercent: number;
+
+  /** Shared ownership percentage applied (100 if sole ownership / not configured) */
+  sharedOwnershipPercent: number;
+
+  /** Reserved equity amount excluded from the shared split (0 if not configured) */
+  reservedEquity: number;
 }
 
 /** Principal and interest breakdown for a single monthly payment */
@@ -95,7 +111,7 @@ export function calculateMonthlyPayment(principal: number, annualRate: number, t
   }
 
   const factor = Math.pow(1 + monthlyRate, totalPayments);
-  return principal * (monthlyRate * factor) / (factor - 1);
+  return (principal * (monthlyRate * factor)) / (factor - 1);
 }
 
 /**
@@ -323,17 +339,36 @@ export function calculateCurrentEquity(
   const originalOutstanding = totalPropertyValue - equity;
   const outstandingBalance = Math.max(0, originalOutstanding - principalRepaid);
 
-  // ── Current equity ──
+  // ── Current equity (full, before shared ownership) ──
   const currentEquity = currentPropertyValue - outstandingBalance;
+
+  // ── Shared ownership adjustment ──
+  // 1. Deduct reserved equity from the pool
+  // 2. Apply shared ownership percentage to the remainder
+  // 3. Add reserved equity back (it belongs solely to the user)
+  const ownershipPercent = mortgageData.sharedOwnershipPercent ?? 100;
+  const reserved = mortgageData.reservedEquity ?? 0;
+
+  let adjustedEquity: number;
+  if (ownershipPercent >= 100 && reserved <= 0) {
+    // No shared ownership, no reserved equity — fast path
+    adjustedEquity = currentEquity;
+  } else {
+    const sharedPool = currentEquity - reserved;
+    adjustedEquity = (sharedPool * ownershipPercent) / 100 + reserved;
+  }
 
   return {
     originalEquity: equity,
     principalRepaid,
     appreciation,
     currentEquity,
+    adjustedEquity,
     currentPropertyValue,
     outstandingBalance,
     hpiChangePercent,
+    sharedOwnershipPercent: ownershipPercent,
+    reservedEquity: reserved,
   };
 }
 

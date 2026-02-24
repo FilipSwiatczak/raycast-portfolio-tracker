@@ -156,6 +156,21 @@ export interface MortgageData {
    * Optional — part of the principal tracking triple.
    */
   mortgageStartDate?: string;
+
+  /**
+   * Shared ownership percentage (e.g. 50 means you own 50% of the property).
+   * Optional — when set, equity is split according to this percentage after
+   * deducting any reserved equity. 100 or undefined = sole ownership.
+   */
+  sharedOwnershipPercent?: number;
+
+  /**
+   * Reserved equity amount that belongs solely to the user, excluded from
+   * the shared ownership split (e.g. £30,000 extra deposit contribution).
+   * Deducted from equity before the shared ownership modifier is applied,
+   * then added back to the user's share afterwards.
+   */
+  reservedEquity?: number;
 }
 
 /**
@@ -312,12 +327,18 @@ export interface PositionValuation {
   totalNativeValue: number;
   /** Value converted to base currency */
   totalBaseValue: number;
-  /** Daily change in native currency */
+  /** Daily change in native currency (or equity change for property) */
   change: number;
-  /** Daily change as percentage */
+  /** Daily change as percentage (or equity-relative change % for property) */
   changePercent: number;
   /** The FX rate applied (1.0 if same as base currency) */
   fxRate: number;
+  /**
+   * Raw HPI percentage change since valuation (property positions only).
+   * Undefined for non-property positions. Used by the detail panel to
+   * display the HPI change separately from the equity-relative changePercent.
+   */
+  hpiChangePercent?: number;
 }
 
 /** Valuation of an account (sum of its positions) */

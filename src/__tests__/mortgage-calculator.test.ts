@@ -6,6 +6,7 @@
  * - Month-by-month principal/interest breakdown
  * - Cumulative principal repayment between dates
  * - Current equity calculation (original equity + principal + appreciation)
+ * - Shared ownership and reserved equity adjustments
  * - Principal/interest ratio at a given point in time
  *
  * All functions are pure math — no mocks needed.
@@ -302,23 +303,26 @@ describe("calculateCurrentEquity", () => {
     it("returns full property value as equity when no HPI change", () => {
       const result = calculateCurrentEquity(ownedData, 0);
       expect(result.currentEquity).toBe(500000);
-      expect(result.originalEquity).toBe(500000);
+      expect(result.adjustedEquity).toBe(500000);
+      expect(result.currentPropertyValue).toBe(500000);
       expect(result.outstandingBalance).toBe(0);
       expect(result.principalRepaid).toBe(0);
     });
 
     it("applies positive HPI appreciation to fully owned property", () => {
       const result = calculateCurrentEquity(ownedData, 5);
+      // 500000 * 1.05 = 525000
       expect(result.currentPropertyValue).toBeCloseTo(525000, 0);
       expect(result.currentEquity).toBeCloseTo(525000, 0);
-      expect(result.appreciation).toBeCloseTo(25000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(525000, 0);
     });
 
     it("applies negative HPI depreciation", () => {
       const result = calculateCurrentEquity(ownedData, -3);
+      // 500000 * 0.97 = 485000
       expect(result.currentPropertyValue).toBeCloseTo(485000, 0);
       expect(result.currentEquity).toBeCloseTo(485000, 0);
-      expect(result.appreciation).toBeCloseTo(-15000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(485000, 0);
     });
   });
 
@@ -333,9 +337,12 @@ describe("calculateCurrentEquity", () => {
     it("returns original equity when no HPI change and no repayment data", () => {
       const result = calculateCurrentEquity(mortgageData, 0);
       expect(result.currentEquity).toBe(100000);
+      expect(result.adjustedEquity).toBe(100000);
       expect(result.originalEquity).toBe(100000);
       expect(result.principalRepaid).toBe(0);
       expect(result.outstandingBalance).toBe(250000);
+      expect(result.sharedOwnershipPercent).toBe(100);
+      expect(result.reservedEquity).toBe(0);
     });
 
     it("increases equity with positive HPI change", () => {
@@ -345,6 +352,7 @@ describe("calculateCurrentEquity", () => {
       // Equity: 364700 - 250000 = 114700
       expect(result.currentPropertyValue).toBeCloseTo(364700, 0);
       expect(result.currentEquity).toBeCloseTo(114700, 0);
+      expect(result.adjustedEquity).toBeCloseTo(114700, 0);
       expect(result.appreciation).toBeCloseTo(14700, 0);
     });
 
@@ -456,6 +464,187 @@ describe("calculateCurrentEquity", () => {
       expect(result.currentPropertyValue).toBeCloseTo(400000, 0);
       // Outstanding stays 150000
       expect(result.currentEquity).toBeCloseTo(250000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(250000, 0);
+    });
+  });
+
+  // ────────────────────────────────────────
+  // Shared Ownership & Reserved Equity
+  // ────────────────────────────────────────
+
+  describe("shared ownership", () => {
+    it("adjusts equity by ownership percentage (50/50 split)", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+      };
+      const result = calculateCurrentEquity(data, 0);
+      // Full equity = 200000, no reserved equity
+      // sharedPool = 200000 - 0 = 200000
+      // adjustedEquity = 200000 * 50/100 + 0 = 100000
+      expect(result.currentEquity).toBe(200000);
+      expect(result.adjustedEquity).toBe(100000);
+      expect(result.sharedOwnershipPercent).toBe(50);
+      expect(result.reservedEquity).toBe(0);
+    });
+
+    it("adjusts equity with HPI appreciation on shared ownership", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+      };
+      const result = calculateCurrentEquity(data, 5);
+      // Property value: 500000 * 1.05 = 525000
+      // Outstanding: 300000
+      // Full equity: 525000 - 300000 = 225000
+      // adjustedEquity: 225000 * 50/100 = 112500
+      expect(result.currentEquity).toBeCloseTo(225000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(112500, 0);
+    });
+
+    it("treats 100% ownership same as no shared ownership", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 350000,
+        equity: 100000,
+        valuationDate: "2023-01-01",
+        postcode: "M1 1AA",
+        sharedOwnershipPercent: 100,
+      };
+      const result = calculateCurrentEquity(data, 4.2);
+      expect(result.currentEquity).toBeCloseTo(result.adjustedEquity, 0);
+      expect(result.sharedOwnershipPercent).toBe(100);
+    });
+
+    it("treats undefined ownership same as 100%", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 350000,
+        equity: 100000,
+        valuationDate: "2023-01-01",
+        postcode: "M1 1AA",
+      };
+      const result = calculateCurrentEquity(data, 4.2);
+      expect(result.currentEquity).toBeCloseTo(result.adjustedEquity, 0);
+      expect(result.sharedOwnershipPercent).toBe(100);
+    });
+  });
+
+  describe("reserved equity", () => {
+    it("reserved equity is excluded from ownership split", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+        reservedEquity: 30000,
+      };
+      const result = calculateCurrentEquity(data, 0);
+      // Full equity = 200000
+      // sharedPool = 200000 - 30000 = 170000
+      // adjustedEquity = (170000 * 50/100) + 30000 = 85000 + 30000 = 115000
+      expect(result.currentEquity).toBe(200000);
+      expect(result.adjustedEquity).toBe(115000);
+      expect(result.sharedOwnershipPercent).toBe(50);
+      expect(result.reservedEquity).toBe(30000);
+    });
+
+    it("reserved equity with HPI appreciation", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+        reservedEquity: 30000,
+      };
+      const result = calculateCurrentEquity(data, 10);
+      // Property value: 500000 * 1.10 = 550000
+      // Outstanding: 300000
+      // Full equity: 550000 - 300000 = 250000
+      // sharedPool = 250000 - 30000 = 220000
+      // adjustedEquity = (220000 * 50/100) + 30000 = 110000 + 30000 = 140000
+      expect(result.currentEquity).toBeCloseTo(250000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(140000, 0);
+    });
+
+    it("reserved equity without shared ownership has no effect", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 350000,
+        equity: 100000,
+        valuationDate: "2023-01-01",
+        postcode: "M1 1AA",
+        reservedEquity: 30000,
+      };
+      const result = calculateCurrentEquity(data, 0);
+      // No shared ownership (100%) — reserved equity doesn't matter
+      // sharedPool = 100000 - 30000 = 70000
+      // adjustedEquity = (70000 * 100/100) + 30000 = 100000 (same as currentEquity)
+      expect(result.currentEquity).toBe(100000);
+      expect(result.adjustedEquity).toBe(100000);
+    });
+
+    it("reserved equity with principal repayment and shared ownership", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+        reservedEquity: 30000,
+        mortgageRate: 4.5,
+        mortgageTerm: 25,
+        mortgageStartDate: "2023-01-01",
+      };
+      const result = calculateCurrentEquity(data, 0, "2025-01-01");
+      // With 0% HPI, equity = original + principal repaid
+      expect(result.principalRepaid).toBeGreaterThan(0);
+      expect(result.currentEquity).toBeGreaterThan(200000);
+      // Adjusted should apply shared ownership split with reserved carve-out
+      const expectedAdjusted = ((result.currentEquity - 30000) * 50) / 100 + 30000;
+      expect(result.adjustedEquity).toBeCloseTo(expectedAdjusted, 0);
+    });
+
+    it("handles zero reserved equity with shared ownership", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 400000,
+        equity: 100000,
+        valuationDate: "2023-01-01",
+        postcode: "E1 1AA",
+        sharedOwnershipPercent: 60,
+        reservedEquity: 0,
+      };
+      const result = calculateCurrentEquity(data, 5);
+      // Property value: 400000 * 1.05 = 420000
+      // Outstanding: 300000
+      // Full equity: 420000 - 300000 = 120000
+      // adjustedEquity: 120000 * 60/100 = 72000
+      expect(result.currentEquity).toBeCloseTo(120000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(72000, 0);
+    });
+
+    it("handles negative equity with shared ownership", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 300000,
+        equity: 50000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+        reservedEquity: 10000,
+      };
+      const result = calculateCurrentEquity(data, -25);
+      // Property value: 300000 * 0.75 = 225000
+      // Outstanding: 250000
+      // Full equity: 225000 - 250000 = -25000 (negative equity)
+      // sharedPool = -25000 - 10000 = -35000
+      // adjustedEquity = (-35000 * 50/100) + 10000 = -17500 + 10000 = -7500
+      expect(result.currentEquity).toBeCloseTo(-25000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(-7500, 0);
     });
   });
 });

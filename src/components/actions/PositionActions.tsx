@@ -45,17 +45,28 @@ interface PositionActionsProps {
   /** The ID of the account that contains this position */
   accountId: string;
 
+  /** Whether this position is a property (MORTGAGE or OWNED_PROPERTY) */
+  isProperty?: boolean;
+
   /**
    * Callback to navigate to the add-units form for this position.
    * Typically pushes an AddUnitsForm onto the navigation stack.
+   * Not used for property positions.
    */
   onAddUnits: () => void;
 
   /**
    * Callback to navigate to the edit form for this position.
-   * Typically pushes an EditPositionForm onto the navigation stack.
+   * Typically pushes an EditPositionForm or EditMortgageForm onto the navigation stack.
    */
   onEditPosition: () => void;
+
+  /**
+   * Callback to add a new valuation to a property position.
+   * Navigates to the edit mortgage form (same as edit, but conceptually "new valuation").
+   * Only used for property positions.
+   */
+  onAddValuation?: () => void;
 
   /**
    * Callback to delete this position from the account.
@@ -83,8 +94,9 @@ interface PositionActionsProps {
  * displaying the position name and current units for clarity.
  *
  * Keyboard shortcuts:
- * - ⇧⌘U → Add Units
+ * - ⇧⌘U → Add Units (non-property only)
  * - ⌘E → Edit Asset
+ * - ⇧⌘V → Add Valuation (property only)
  * - ⌃X → Remove Position (with confirmation)
  * - ⌘C → Copy Symbol
  * - ⇧⌘C → Copy Name
@@ -94,8 +106,10 @@ export function PositionActions({
   position,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
+  isProperty = false,
   onAddUnits,
   onEditPosition,
+  onAddValuation,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
   const displayName = getDisplayName(position);
@@ -127,19 +141,42 @@ export function PositionActions({
   return (
     <>
       <ActionPanel.Section title={`${displayName} (${position.symbol})`}>
-        <Action
-          title="Add Units"
-          icon={Icon.PlusSquare}
-          shortcut={{ modifiers: ["cmd", "shift"], key: "u" }}
-          onAction={onAddUnits}
-        />
+        {/* Property: Edit Asset is the default action; non-property: Add Units is default */}
+        {isProperty ? (
+          <>
+            <Action
+              title="Edit Asset"
+              icon={Icon.Pencil}
+              shortcut={{ modifiers: ["cmd"], key: "e" }}
+              onAction={onEditPosition}
+            />
 
-        <Action
-          title="Edit Asset"
-          icon={Icon.Pencil}
-          shortcut={{ modifiers: ["cmd"], key: "e" }}
-          onAction={onEditPosition}
-        />
+            {onAddValuation && (
+              <Action
+                title="Add Valuation"
+                icon={Icon.Calendar}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
+                onAction={onAddValuation}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <Action
+              title="Add Units"
+              icon={Icon.PlusSquare}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "u" }}
+              onAction={onAddUnits}
+            />
+
+            <Action
+              title="Edit Asset"
+              icon={Icon.Pencil}
+              shortcut={{ modifiers: ["cmd"], key: "e" }}
+              onAction={onEditPosition}
+            />
+          </>
+        )}
 
         <Action
           title="Remove Position"

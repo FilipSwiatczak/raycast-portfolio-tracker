@@ -434,11 +434,15 @@ function AccountSection({
                 <PositionActions
                   position={positionVal.position}
                   accountId={account.id}
+                  isProperty={isPropertyPos}
                   onAddUnits={() => onAddUnits(account, positionVal.position)}
                   onEditPosition={() =>
                     isPropertyPos
                       ? onEditPropertyPosition(account, positionVal.position)
                       : onEditPosition(account, positionVal.position)
+                  }
+                  onAddValuation={
+                    isPropertyPos ? () => onEditPropertyPosition(account, positionVal.position) : undefined
                   }
                   onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
                 />

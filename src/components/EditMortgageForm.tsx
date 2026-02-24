@@ -129,6 +129,8 @@ export function EditMortgageForm({
   const [postcodeError, setPostcodeError] = useState<string | undefined>();
   const [rateError, setRateError] = useState<string | undefined>();
   const [termError, setTermError] = useState<string | undefined>();
+  const [sharedOwnershipError, setSharedOwnershipError] = useState<string | undefined>();
+  const [reservedEquityError, setReservedEquityError] = useState<string | undefined>();
 
   // ── Derived State ──
 
@@ -146,6 +148,8 @@ export function EditMortgageForm({
     mortgageRate: mortgageData?.mortgageRate?.toString() ?? "",
     mortgageTerm: mortgageData?.mortgageTerm?.toString() ?? "",
     mortgageStartDate: mortgageData?.mortgageStartDate ? new Date(mortgageData.mortgageStartDate) : null,
+    sharedOwnership: mortgageData?.sharedOwnershipPercent?.toString() ?? "",
+    reservedEquity: mortgageData?.reservedEquity?.toString() ?? "",
   };
 
   // ── Validation Helpers ──
@@ -184,6 +188,15 @@ export function EditMortgageForm({
     return undefined;
   }
 
+  function validateNonNegativeNumber(value: string, fieldName: string): string | undefined {
+    const trimmed = (value ?? "").trim();
+    if (trimmed.length === 0) return undefined; // optional field
+    const num = Number(trimmed);
+    if (isNaN(num) || !isFinite(num)) return "Must be a valid number";
+    if (num < 0) return `${fieldName} cannot be negative`;
+    return undefined;
+  }
+
   // ── Submission ──
 
   async function handleSubmit(values: {
@@ -196,6 +209,8 @@ export function EditMortgageForm({
     mortgageRate: string;
     mortgageTerm: string;
     mortgageStartDate: Date | null;
+    sharedOwnership: string;
+    reservedEquity: string;
   }) {
     // ── Validate required fields ──
 
@@ -296,6 +311,39 @@ export function EditMortgageForm({
       }
     }
 
+    // ── Shared ownership & reserved equity (optional) ──
+
+    let sharedOwnershipPercent: number | undefined;
+    let reservedEquity: number | undefined;
+
+    const soErr = validatePercentage(values.sharedOwnership, "Shared ownership");
+    if (soErr) {
+      setSharedOwnershipError(soErr);
+      return;
+    }
+    if (values.sharedOwnership?.trim().length > 0) {
+      const soVal = Number(values.sharedOwnership.trim());
+      if (soVal > 0 && soVal < 100) {
+        sharedOwnershipPercent = soVal;
+      }
+    }
+
+    const reErr = validateNonNegativeNumber(values.reservedEquity, "Reserved equity");
+    if (reErr) {
+      setReservedEquityError(reErr);
+      return;
+    }
+    if (values.reservedEquity?.trim().length > 0) {
+      const reVal = Number(values.reservedEquity.trim());
+      if (reVal > 0) {
+        if (reVal > equity) {
+          setReservedEquityError("Reserved equity cannot exceed current equity");
+          return;
+        }
+        reservedEquity = reVal;
+      }
+    }
+
     // ── Build updated mortgage data ──
 
     const updatedMortgageData: MortgageData = {
@@ -306,6 +354,8 @@ export function EditMortgageForm({
       ...(mortgageRate !== undefined && { mortgageRate }),
       ...(mortgageTerm !== undefined && { mortgageTerm }),
       ...(mortgageStartDate !== undefined && { mortgageStartDate }),
+      ...(sharedOwnershipPercent !== undefined && { sharedOwnershipPercent }),
+      ...(reservedEquity !== undefined && { reservedEquity }),
     };
 
     // ── Submit ──
@@ -355,7 +405,12 @@ export function EditMortgageForm({
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Save Changes" icon={Icon.Check} onSubmit={handleSubmit} />
-          <Action title="Cancel" icon={Icon.XMarkCircle} onAction={onDone} shortcut={{ modifiers: ["cmd"], key: "." }} />
+          <Action
+            title="Cancel"
+            icon={Icon.XMarkCircle}
+            onAction={onDone}
+            shortcut={{ modifiers: ["cmd"], key: "." }}
+          />
         </ActionPanel>
       }
     >
@@ -479,6 +534,34 @@ export function EditMortgageForm({
           <Form.TextField id="mortgageTerm" title="" value="" />
         </>
       )}
+
+      {/* ── Shared Ownership (optional, any property type) ── */}
+      <Form.Separator />
+
+      <Form.Description
+        title="👥 Shared Ownership"
+        text="Optional: if the property is jointly owned, specify your ownership share. Reserved equity is an amount that belongs solely to you (e.g. extra deposit contribution) — it is excluded from the ownership split."
+      />
+
+      <Form.TextField
+        id="sharedOwnership"
+        title="Ownership Share (%)"
+        placeholder="e.g. 50"
+        defaultValue={defaults.sharedOwnership}
+        error={sharedOwnershipError}
+        onChange={() => sharedOwnershipError && setSharedOwnershipError(undefined)}
+        info="Your ownership percentage of the property (e.g. 50 for a 50/50 split). Leave empty for sole ownership (100%)."
+      />
+
+      <Form.TextField
+        id="reservedEquity"
+        title={`Reserved Equity (${currencySymbol})`}
+        placeholder="e.g. 30000"
+        defaultValue={defaults.reservedEquity}
+        error={reservedEquityError}
+        onChange={() => reservedEquityError && setReservedEquityError(undefined)}
+        info="An amount of equity reserved solely for you, excluded from the shared ownership split. For example, if you contributed an extra £30k deposit that is yours outright per the mortgage deed."
+      />
     </Form>
   );
 }

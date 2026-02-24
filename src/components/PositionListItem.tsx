@@ -112,7 +112,8 @@ export function PositionListItem({
   isShowingDetail,
   actions,
 }: PositionListItemProps): React.JSX.Element {
-  const { position, currentPrice, totalNativeValue, totalBaseValue, change, changePercent, fxRate } = valuation;
+  const { position, currentPrice, totalNativeValue, totalBaseValue, change, changePercent, fxRate, hpiChangePercent } =
+    valuation;
 
   // ── Computed Display Values ──
 
@@ -176,6 +177,7 @@ export function PositionListItem({
       baseCurrency,
       displayName,
       isRenamed,
+      hpiChangePercent,
       keywords,
       actions,
     });
@@ -276,25 +278,29 @@ function renderListMode({
       tooltip: `Cash balance: ${formatCurrency(totalBaseValue, baseCurrency)}`,
     });
   } else if (hasPrice) {
-    // Price in native currency
+    // Price / equity in native currency
     accessories.push({
       text: { value: formatCurrency(currentPrice, position.currency), color: Color.SecondaryText },
-      tooltip: `Price per unit in ${position.currency}`,
+      tooltip: isProperty ? `Equity in ${position.currency}` : `Price per unit in ${position.currency}`,
     });
 
-    // Daily change percentage (coloured tag)
+    // Change percentage (coloured tag)
     accessories.push({
       tag: {
         value: formatPercent(changePercent),
         color: changeColor,
       },
-      tooltip: `Day change: ${formatPercent(changePercent)}`,
+      tooltip: isProperty
+        ? `Change since valuation: ${formatPercent(changePercent)}`
+        : `Day change: ${formatPercent(changePercent)}`,
     });
 
-    // Total value in base currency (rightmost = most prominent)
+    // Total value / equity in base currency (rightmost = most prominent)
     accessories.push({
       text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: Color.PrimaryText },
-      tooltip: `Total value: ${formatCurrency(totalBaseValue, baseCurrency)}`,
+      tooltip: isProperty
+        ? `Equity: ${formatCurrency(totalBaseValue, baseCurrency)}`
+        : `Total value: ${formatCurrency(totalBaseValue, baseCurrency)}`,
     });
   } else {
     accessories.push({
@@ -341,6 +347,7 @@ interface DetailModeProps {
   baseCurrency: string;
   displayName: string;
   isRenamed: boolean;
+  hpiChangePercent?: number;
   keywords: string[];
   actions: React.JSX.Element;
 }
@@ -382,6 +389,7 @@ function renderDetailMode({
   baseCurrency,
   displayName,
   isRenamed,
+  hpiChangePercent,
   keywords,
   actions,
 }: DetailModeProps): React.JSX.Element {
@@ -417,13 +425,12 @@ function renderDetailMode({
           position,
           typeLabel,
           totalBaseValue,
-          changePercent,
-          changeColor,
           fxRate,
           isCrossCurrency,
           baseCurrency,
           displayName,
           isRenamed,
+          hpiChangePercent,
         })
       : buildSecuritiesDetail({
           position,
@@ -532,29 +539,28 @@ function buildPropertyDetail({
   position,
   typeLabel,
   totalBaseValue,
-  changePercent,
-  changeColor,
   fxRate,
   isCrossCurrency,
   baseCurrency,
   displayName,
   isRenamed,
+  hpiChangePercent,
 }: {
   position: PositionValuation["position"];
   typeLabel: string;
   totalBaseValue: number;
-  changePercent: number;
-  changeColor: Color;
   fxRate: number;
   isCrossCurrency: boolean;
   baseCurrency: string;
   displayName: string;
   isRenamed: boolean;
+  hpiChangePercent?: number;
 }): React.JSX.Element {
   const md = position.mortgageData;
 
-  // Compute equity breakdown for display
-  const equityCalc = md ? calculateCurrentEquity(md, changePercent) : null;
+  // Use raw HPI for the mortgage calculator (not the equity-relative changePercent)
+  const rawHPI = hpiChangePercent ?? 0;
+  const equityCalc = md ? calculateCurrentEquity(md, rawHPI) : null;
   const piRatio = md ? getCurrentPrincipalInterestRatio(md) : null;
 
   return (
@@ -590,8 +596,8 @@ function buildPropertyDetail({
               <List.Item.Detail.Metadata.Label
                 title="HPI Change"
                 text={{
-                  value: formatPercent(changePercent),
-                  color: changeColor,
+                  value: formatPercent(rawHPI),
+                  color: rawHPI > 0 ? COLOR_POSITIVE : rawHPI < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL,
                 }}
               />
 
@@ -628,6 +634,27 @@ function buildPropertyDetail({
                   title="Outstanding Mortgage"
                   text={formatCurrency(equityCalc.outstandingBalance, position.currency)}
                 />
+              )}
+
+              {/* ── Shared Ownership Adjustment ── */}
+              {equityCalc.sharedOwnershipPercent < 100 && (
+                <>
+                  <List.Item.Detail.Metadata.Separator />
+                  <List.Item.Detail.Metadata.Label
+                    title="Ownership Share"
+                    text={`${equityCalc.sharedOwnershipPercent}%`}
+                  />
+                  {equityCalc.reservedEquity > 0 && (
+                    <List.Item.Detail.Metadata.Label
+                      title="Reserved Equity"
+                      text={formatCurrency(equityCalc.reservedEquity, position.currency)}
+                    />
+                  )}
+                  <List.Item.Detail.Metadata.Label
+                    title="Your Equity"
+                    text={formatCurrency(equityCalc.adjustedEquity, position.currency)}
+                  />
+                </>
               )}
             </>
           )}

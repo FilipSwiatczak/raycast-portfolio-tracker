@@ -30,6 +30,17 @@ jest.mock("@raycast/api", () => ({
     remove: (key: string) => mockCacheStore.delete(key),
     clear: () => mockCacheStore.clear(),
   })),
+  Color: {
+    Blue: "blue",
+    Purple: "purple",
+    Orange: "orange",
+    Green: "green",
+    Magenta: "magenta",
+    Yellow: "yellow",
+    Red: "red",
+    SecondaryText: "secondaryText",
+    PrimaryText: "primaryText",
+  },
 }));
 
 // Mock global fetch
@@ -130,7 +141,7 @@ const MANCHESTER_POSTCODE_RESPONSE = {
     outcode: "M1",
     incode: "1AA",
     longitude: -2.23743,
-    latitude: 53.47760,
+    latitude: 53.4776,
     codes: {},
   },
 };
@@ -226,16 +237,10 @@ function setupFetchMocks(options?: {
 }) {
   mockFetch.mockImplementation(async (url: string) => {
     if (url.includes("api.postcodes.io")) {
-      return mockJsonResponse(
-        options?.postcodeResponse ?? LONDON_POSTCODE_RESPONSE,
-        options?.postcodeStatus ?? 200,
-      );
+      return mockJsonResponse(options?.postcodeResponse ?? LONDON_POSTCODE_RESPONSE, options?.postcodeStatus ?? 200);
     }
     if (url.includes("landregistry.data.gov.uk")) {
-      return mockJsonResponse(
-        options?.hpiResponse ?? buildHPIResponse(LONDON_HPI_DATA),
-        options?.hpiStatus ?? 200,
-      );
+      return mockJsonResponse(options?.hpiResponse ?? buildHPIResponse(LONDON_HPI_DATA), options?.hpiStatus ?? 200);
     }
     return mockJsonResponse({ error: "Unknown URL" }, 500);
   });
