@@ -71,12 +71,45 @@ export default function PortfolioCommand(): React.JSX.Element {
     errors,
     baseCurrency,
     refresh: refreshPrices,
+    newlyPaidOffIds,
+    clearNewlyPaidOff,
   } = usePortfolioValue(portfolio);
 
   const isLoading = isPortfolioLoading || isValuationLoading;
 
   // ── Archived Debt Toggle State ──
   const [showArchivedDebt, setShowArchivedDebt] = useState(false);
+
+  // ── Auto-persist paid-off flag when sync detects a fully-repaid debt ──
+  // When the repayment sync calculates that a debt's balance has reached zero,
+  // it signals this via `newlyPaidOffIds`. We write `paidOff: true` back to
+  // the portfolio positions so the UI reflects the settled state on next render.
+  useEffect(() => {
+    if (!portfolio || newlyPaidOffIds.size === 0) return;
+
+    const idsToMark = new Set(newlyPaidOffIds);
+    clearNewlyPaidOff();
+
+    (async () => {
+      for (const account of portfolio.accounts) {
+        for (const position of account.positions) {
+          if (!idsToMark.has(position.id) || !position.debtData) continue;
+          await updateDebtPosition(account.id, position.id, {
+            debtData: { ...position.debtData, paidOff: true },
+          });
+        }
+      }
+      revalidatePortfolio();
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Debt Paid Off 🎉",
+        message:
+          idsToMark.size === 1
+            ? "A debt has been automatically marked as paid off."
+            : `${idsToMark.size} debts have been automatically marked as paid off.`,
+      });
+    })();
+  }, [newlyPaidOffIds, clearNewlyPaidOff, portfolio, updateDebtPosition, revalidatePortfolio]);
 
   // ── Update Command Metadata ──
   // This sets the grey subtitle text visible in Raycast's search bar
@@ -262,12 +295,20 @@ export default function PortfolioCommand(): React.JSX.Element {
   function handleEditDebtPosition(account: Account, position: Position): void {
     if (!isDebtAssetType(position.assetType)) return;
 
+    // Look up the live synced balance from the current valuation so EditDebtForm
+    // pre-populates with the actual post-repayment balance rather than the stale
+    // original value stored in debtData.currentBalance.
+    const syncedBalance = valuation?.accounts
+      .find((av) => av.account.id === account.id)
+      ?.positions.find((pv) => pv.position.id === position.id)?.currentPrice;
+
     push(
       <EditDebtForm
         position={position}
         accountId={account.id}
         accountName={account.name}
         baseCurrency={baseCurrency}
+        syncedBalance={syncedBalance}
         onSave={async (updates) => {
           await updateDebtPosition(account.id, position.id, updates);
         }}

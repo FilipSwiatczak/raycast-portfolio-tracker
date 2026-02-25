@@ -98,11 +98,7 @@ export interface MonthlyUpdateResult {
  * applyMonthlyUpdate(5000, 19.9, 200)
  * // { newBalance: 4882.92, interestCharged: 82.92, principalPaid: 117.08, isPaidOff: false }
  */
-export function applyMonthlyUpdate(
-  balance: number,
-  apr: number,
-  monthlyRepayment: number,
-): MonthlyUpdateResult {
+export function applyMonthlyUpdate(balance: number, apr: number, monthlyRepayment: number): MonthlyUpdateResult {
   if (balance <= 0) {
     return { newBalance: 0, interestCharged: 0, principalPaid: 0, isPaidOff: true };
   }
@@ -240,11 +236,7 @@ export interface LoanProgress {
  * calculateLoanProgress("2022-01-15", "2027-01-15")
  * // { totalMonths: 60, monthsElapsed: 30, monthsRemaining: 30, progressPercent: 50, isTermComplete: false }
  */
-export function calculateLoanProgress(
-  startDate: string,
-  endDate: string,
-  now: Date = new Date(),
-): LoanProgress {
+export function calculateLoanProgress(startDate: string, endDate: string, now: Date = new Date()): LoanProgress {
   const start = new Date(startDate);
   const end = new Date(endDate);
 
@@ -380,11 +372,7 @@ export function calculateCurrentDebtBalance(
  * @param now            - Current date
  * @returns Number of repayment days that have passed
  */
-export function countRepaymentsDue(
-  enteredAt: string,
-  repaymentDay: number,
-  now: Date = new Date(),
-): number {
+export function countRepaymentsDue(enteredAt: string, repaymentDay: number, now: Date = new Date()): number {
   const entryDate = new Date(enteredAt);
   let count = 0;
 
@@ -404,8 +392,9 @@ export function countRepaymentsDue(
   // include that month; otherwise start from the next month
   const entryDay = entryDate.getDate();
   const effectiveRepaymentDayInEntryMonth = Math.min(repaymentDay, daysInMonth(year, month));
-  if (entryDay >= effectiveRepaymentDayInEntryMonth) {
-    // Entry was on or after the repayment day — first repayment is next month
+  if (entryDay > effectiveRepaymentDayInEntryMonth) {
+    // Entry was strictly after the repayment day — first repayment is next month.
+    // If entered ON the repayment day, today counts as the first due repayment.
     month++;
     if (month > 11) {
       month = 0;
@@ -481,9 +470,7 @@ export function buildDebtSummary(
 
   const originalBalance = debtData.currentBalance;
   const totalRepaid = balanceResult.totalPrincipalRepaid;
-  const paidOffPercent = originalBalance > 0
-    ? Math.min(100, (totalRepaid / originalBalance) * 100)
-    : 0;
+  const paidOffPercent = originalBalance > 0 ? Math.min(100, (totalRepaid / originalBalance) * 100) : 0;
 
   let estimatedPayoffDate: string | null = null;
   if (balanceResult.monthsToPayoff !== null) {

@@ -59,6 +59,14 @@ interface EditDebtFormProps {
   baseCurrency: string;
 
   /**
+   * The live synced balance from the repayment engine (currentPrice from PositionValuation).
+   * When provided, pre-populates the balance field with the actual post-repayment balance
+   * rather than the stale original value stored in debtData.currentBalance.
+   * Falls back to debtData.currentBalance if not provided.
+   */
+  syncedBalance?: number;
+
+  /**
    * Callback fired when the form is submitted with valid data.
    * Receives the updated fields for the position.
    */
@@ -128,6 +136,7 @@ export function EditDebtForm({
   accountId,
   accountName,
   baseCurrency,
+  syncedBalance,
   onSave,
   onDone,
 }: EditDebtFormProps): React.JSX.Element {
@@ -144,7 +153,10 @@ export function EditDebtForm({
 
   // Track raw string values for controlled inputs
   const [nameStr, setNameStr] = useState(position.customName || position.name);
-  const [balanceStr, setBalanceStr] = useState(String(debtData.currentBalance));
+  // Use the live synced balance if available — it reflects auto-applied repayments.
+  // Falls back to the original stored value when no sync result exists yet.
+  const initialBalance = syncedBalance ?? debtData.currentBalance;
+  const [balanceStr, setBalanceStr] = useState(String(initialBalance));
   const [aprStr, setAprStr] = useState(String(debtData.apr));
   const [repaymentStr, setRepaymentStr] = useState(String(debtData.monthlyRepayment));
   const [repaymentDayStr, setRepaymentDayStr] = useState(String(debtData.repaymentDayOfMonth));

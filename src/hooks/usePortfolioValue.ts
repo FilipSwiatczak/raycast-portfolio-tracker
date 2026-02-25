@@ -81,6 +81,17 @@ export interface UsePortfolioValueReturn {
 
   /** Manually trigger a refresh of all prices and FX rates */
   refresh: () => void;
+
+  /**
+   * Position IDs that were auto-detected as fully paid off during the last
+   * debt sync but whose `debtData.paidOff` flag has not yet been persisted.
+   * The caller should write `paidOff: true` back to those positions and then
+   * call `clearNewlyPaidOff()` to reset this set.
+   */
+  newlyPaidOffIds: Set<string>;
+
+  /** Clears the newlyPaidOffIds set after the caller has persisted them. */
+  clearNewlyPaidOff: () => void;
 }
 
 // ──────────────────────────────────────────
@@ -132,6 +143,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
   const [debtSyncResults, setDebtSyncResults] = useState<Map<string, SyncResult>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<PortfolioError[]>([]);
+  const [newlyPaidOffIds, setNewlyPaidOffIds] = useState<Set<string>>(new Set());
 
   // Track fetch generation to discard stale responses
   const fetchGenRef = useRef(0);
@@ -259,6 +271,26 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       setFxRates(fxResult);
       setHpiData(hpiResult);
       setDebtSyncResults(debtResult);
+
+      // Detect positions that the sync has determined are now paid off but whose
+      // debtData.paidOff flag hasn't been persisted yet. We compare against the
+      // current portfolio positions so we only flag genuinely new transitions.
+      const freshlyPaidOff = new Set<string>();
+      if (portfolio) {
+        for (const account of portfolio.accounts) {
+          for (const position of account.positions) {
+            if (!position.debtData) continue;
+            if (position.debtData.paidOff) continue; // already persisted — skip
+            const syncResult = debtResult.get(position.id);
+            if (syncResult?.isPaidOff) {
+              freshlyPaidOff.add(position.id);
+            }
+          }
+        }
+      }
+      if (freshlyPaidOff.size > 0) {
+        setNewlyPaidOffIds(freshlyPaidOff);
+      }
 
       // Collect errors from price fetches
       const fetchErrors: PortfolioError[] = priceResult.errors.map(({ symbol, error }) =>
@@ -449,12 +481,18 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
     fetchData();
   }, [fetchData]);
 
+  const clearNewlyPaidOff = useCallback(() => {
+    setNewlyPaidOffIds(new Set());
+  }, []);
+
   return {
     valuation,
     isLoading,
     errors,
     baseCurrency,
     refresh,
+    newlyPaidOffIds,
+    clearNewlyPaidOff,
   };
 }
 

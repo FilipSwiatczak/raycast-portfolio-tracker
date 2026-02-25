@@ -291,13 +291,14 @@ describe("calculateLoanProgress", () => {
 // ──────────────────────────────────────────
 
 describe("countRepaymentsDue", () => {
-  it("counts zero repayments when entered today on the repayment day", () => {
+  it("counts one repayment when entered today on the repayment day", () => {
     // Entered on Jan 15, repayment day 15, now = Jan 15
+    // Entering ON the repayment day means today's repayment is due immediately.
     const now = new Date(2025, 0, 15);
     const count = countRepaymentsDue("2025-01-15T00:00:00Z", 15, now);
 
-    // No repayment due yet — the first one would be Feb 15
-    expect(count).toBe(0);
+    // Today IS the repayment day → 1 repayment due
+    expect(count).toBe(1);
   });
 
   it("counts one repayment when one month has passed", () => {
@@ -333,9 +334,9 @@ describe("countRepaymentsDue", () => {
     const now = new Date(2025, 5, 2); // June 2
     const count = countRepaymentsDue("2025-01-01T00:00:00Z", 1, now);
 
-    // Jan 1 = entry day (on repayment day → skip to next month)
-    // Feb 1, Mar 1, Apr 1, May 1, Jun 1 = 5 repayments
-    expect(count).toBe(5);
+    // Jan 1 = entry day ON the repayment day → counts (today is the first due date)
+    // Feb 1, Mar 1, Apr 1, May 1, Jun 1 = 5 more → total 6
+    expect(count).toBe(6);
   });
 
   it("handles repayment day 31 in months with fewer days", () => {
@@ -390,14 +391,14 @@ describe("countRepaymentsDue", () => {
     expect(count).toBe(4);
   });
 
-  it("handles entry exactly on repayment day — skips that month", () => {
+  it("handles entry exactly on repayment day — counts that month", () => {
     // Entered on March 15, repayment day 15, now = April 16
     const now = new Date(2025, 3, 16);
     const count = countRepaymentsDue("2025-03-15T00:00:00Z", 15, now);
 
-    // March 15 = entry day, entry is ON the repayment day → skip
-    // April 15 ✓ (now is April 16)
-    expect(count).toBe(1);
+    // March 15 = entry day ON the repayment day → counts
+    // April 15 ✓ (now is April 16) → counts
+    expect(count).toBe(2);
   });
 });
 
@@ -507,10 +508,10 @@ describe("buildDebtSummary", () => {
       apr: 15,
       repaymentDayOfMonth: 1,
       monthlyRepayment: 300,
-      enteredAt: "2025-01-01T00:00:00Z",
+      enteredAt: "2025-01-02T00:00:00Z", // entered AFTER repayment day → 0 repayments yet due
     };
 
-    const now = new Date(2025, 0, 1);
+    const now = new Date(2025, 0, 2); // Jan 2 — next repayment (Feb 1) not yet reached
     const summary = buildDebtSummary(debtData, 0, now);
 
     expect(summary.balance).toBe(3000);
@@ -561,14 +562,14 @@ describe("buildDebtSummary", () => {
       apr: 0,
       repaymentDayOfMonth: 1,
       monthlyRepayment: 200,
-      enteredAt: "2025-01-01T00:00:00Z",
+      enteredAt: "2025-01-02T00:00:00Z", // entered AFTER repayment day → 0 repayments yet due
     };
 
-    const now = new Date(2025, 0, 1);
+    const now = new Date(2025, 0, 2); // Jan 2 — next repayment (Feb 1) not yet reached
     const summary = buildDebtSummary(debtData, 0, now);
 
     expect(summary.estimatedPayoffDate).not.toBeNull();
-    // 2400 / 200 = 12 months
+    // 2400 / 200 = 12 months (no repayment applied yet)
     expect(summary.monthsToPayoff).toBe(12);
   });
 
