@@ -33,6 +33,13 @@
       "subtitle": "Portfolio Tracker",
       "description": "Financial Independence, Retire Early — track your progress to financial freedom",
       "mode": "view"
+    },
+    {
+      "name": "import-export",
+      "title": "Import / Export Portfolio",
+      "subtitle": "Portfolio Tracker",
+      "description": "Export your portfolio to CSV or import positions from a CSV file",
+      "mode": "view"
     }
   ],
   "preferences": [
