@@ -119,7 +119,7 @@ export function AddMortgageForm({
   const [rateError, setRateError] = useState<string | undefined>();
   const [termError, setTermError] = useState<string | undefined>();
   const [sharedOwnershipError, setSharedOwnershipError] = useState<string | undefined>();
-  const [reservedEquityError, setReservedEquityError] = useState<string | undefined>();
+  const [myEquityShareError, setMyEquityShareError] = useState<string | undefined>();
 
   // ── Derived State ──
 
@@ -183,7 +183,7 @@ export function AddMortgageForm({
     mortgageTerm: string;
     mortgageStartDate: Date | null;
     sharedOwnership: string;
-    reservedEquity: string;
+    myEquityShare: string;
   }) {
     // ── Validate required fields ──
 
@@ -287,7 +287,7 @@ export function AddMortgageForm({
     // ── Shared ownership & reserved equity (optional) ──
 
     let sharedOwnershipPercent: number | undefined;
-    let reservedEquity: number | undefined;
+    let myEquityShare: number | undefined;
 
     const soErr = validatePercentage(values.sharedOwnership, "Shared ownership");
     if (soErr) {
@@ -302,19 +302,19 @@ export function AddMortgageForm({
       // 100% or 0 are effectively "no split" or "no ownership" — store only meaningful values
     }
 
-    const reErr = validateNonNegativeNumber(values.reservedEquity, "Reserved equity");
-    if (reErr) {
-      setReservedEquityError(reErr);
+    const meErr = validateNonNegativeNumber(values.myEquityShare, "My share of equity");
+    if (meErr) {
+      setMyEquityShareError(meErr);
       return;
     }
-    if (values.reservedEquity?.trim().length > 0) {
-      const reVal = Number(values.reservedEquity.trim());
-      if (reVal > 0) {
-        if (reVal > equity) {
-          setReservedEquityError("Reserved equity cannot exceed current equity");
+    if (values.myEquityShare?.trim().length > 0) {
+      const meVal = Number(values.myEquityShare.trim());
+      if (meVal > 0) {
+        if (meVal > equity) {
+          setMyEquityShareError("Your share cannot exceed total equity");
           return;
         }
-        reservedEquity = reVal;
+        myEquityShare = meVal;
       }
     }
 
@@ -329,7 +329,7 @@ export function AddMortgageForm({
       ...(mortgageTerm !== undefined && { mortgageTerm }),
       ...(mortgageStartDate !== undefined && { mortgageStartDate }),
       ...(sharedOwnershipPercent !== undefined && { sharedOwnershipPercent }),
-      ...(reservedEquity !== undefined && { reservedEquity }),
+      ...(myEquityShare !== undefined && { myEquityShare }),
     };
 
     // ── Submit ──
@@ -495,7 +495,7 @@ export function AddMortgageForm({
 
       <Form.Description
         title="👥 Shared Ownership"
-        text="Optional: if the property is jointly owned, specify your ownership share. Reserved equity is an amount that belongs solely to you (e.g. extra deposit contribution) — it is excluded from the ownership split."
+        text="Optional: if the property is jointly owned, specify your ownership share and your personal share of the deposit. The ownership ratio applies only to gains/losses — your deposit share stays yours."
       />
 
       <Form.TextField
@@ -508,12 +508,12 @@ export function AddMortgageForm({
       />
 
       <Form.TextField
-        id="reservedEquity"
-        title={`Reserved Equity (${currencySymbol})`}
-        placeholder="e.g. 30000"
-        error={reservedEquityError}
-        onChange={() => reservedEquityError && setReservedEquityError(undefined)}
-        info="An amount of equity reserved solely for you, excluded from the shared ownership split. For example, if you contributed an extra £30k deposit that is yours outright per the mortgage deed."
+        id="myEquityShare"
+        title={`My Share of Deposit (${currencySymbol})`}
+        placeholder="e.g. 40000"
+        error={myEquityShareError}
+        onChange={() => myEquityShareError && setMyEquityShareError(undefined)}
+        info="Your personal share of the deposit/equity. The shared ownership ratio is applied only to the net change (principal repaid + market movement) — not to this amount. Final equity = your share + (net change × ownership %)."
       />
     </Form>
   );

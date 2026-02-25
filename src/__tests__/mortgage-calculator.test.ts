@@ -6,8 +6,9 @@
  * - Month-by-month principal/interest breakdown
  * - Cumulative principal repayment between dates
  * - Current equity calculation (original equity + principal + appreciation)
- * - Shared ownership and reserved equity adjustments
+ * - Shared ownership and myEquityShare adjustments
  * - Principal/interest ratio at a given point in time
+ * - Real-life example validation
  *
  * All functions are pure math — no mocks needed.
  */
@@ -304,6 +305,7 @@ describe("calculateCurrentEquity", () => {
       const result = calculateCurrentEquity(ownedData, 0);
       expect(result.currentEquity).toBe(500000);
       expect(result.adjustedEquity).toBe(500000);
+      expect(result.adjustedOriginalEquity).toBe(500000);
       expect(result.currentPropertyValue).toBe(500000);
       expect(result.outstandingBalance).toBe(0);
       expect(result.principalRepaid).toBe(0);
@@ -338,11 +340,13 @@ describe("calculateCurrentEquity", () => {
       const result = calculateCurrentEquity(mortgageData, 0);
       expect(result.currentEquity).toBe(100000);
       expect(result.adjustedEquity).toBe(100000);
+      expect(result.adjustedOriginalEquity).toBe(100000);
       expect(result.originalEquity).toBe(100000);
       expect(result.principalRepaid).toBe(0);
+      expect(result.netChange).toBe(0);
       expect(result.outstandingBalance).toBe(250000);
       expect(result.sharedOwnershipPercent).toBe(100);
-      expect(result.reservedEquity).toBe(0);
+      expect(result.myEquityShare).toBe(0);
     });
 
     it("increases equity with positive HPI change", () => {
@@ -469,11 +473,11 @@ describe("calculateCurrentEquity", () => {
   });
 
   // ────────────────────────────────────────
-  // Shared Ownership & Reserved Equity
+  // Shared Ownership & My Equity Share
   // ────────────────────────────────────────
 
-  describe("shared ownership", () => {
-    it("adjusts equity by ownership percentage (50/50 split)", () => {
+  describe("shared ownership (no myEquityShare)", () => {
+    it("splits full equity by ownership percentage when no myEquityShare", () => {
       const data: MortgageData = {
         totalPropertyValue: 500000,
         equity: 200000,
@@ -482,16 +486,17 @@ describe("calculateCurrentEquity", () => {
         sharedOwnershipPercent: 50,
       };
       const result = calculateCurrentEquity(data, 0);
-      // Full equity = 200000, no reserved equity
-      // sharedPool = 200000 - 0 = 200000
-      // adjustedEquity = 200000 * 50/100 + 0 = 100000
+      // No HPI → netChange = 0, full equity = 200000
+      // No myEquityShare → split full equity: 200000 * 50/100 = 100000
       expect(result.currentEquity).toBe(200000);
       expect(result.adjustedEquity).toBe(100000);
+      expect(result.adjustedOriginalEquity).toBe(100000);
+      expect(result.netChange).toBe(0);
       expect(result.sharedOwnershipPercent).toBe(50);
-      expect(result.reservedEquity).toBe(0);
+      expect(result.myEquityShare).toBe(0);
     });
 
-    it("adjusts equity with HPI appreciation on shared ownership", () => {
+    it("splits equity with HPI appreciation when no myEquityShare", () => {
       const data: MortgageData = {
         totalPropertyValue: 500000,
         equity: 200000,
@@ -503,9 +508,15 @@ describe("calculateCurrentEquity", () => {
       // Property value: 500000 * 1.05 = 525000
       // Outstanding: 300000
       // Full equity: 525000 - 300000 = 225000
-      // adjustedEquity: 225000 * 50/100 = 112500
+      // No myEquityShare → split full equity: 225000 * 50/100 = 112500
+      // adjustedOriginalEquity: 200000 * 50/100 = 100000
       expect(result.currentEquity).toBeCloseTo(225000, 0);
       expect(result.adjustedEquity).toBeCloseTo(112500, 0);
+      expect(result.adjustedOriginalEquity).toBe(100000);
+      // Equity change % = (112500 - 100000) / 100000 = 12.5%
+      const equityChangePct =
+        ((result.adjustedEquity - result.adjustedOriginalEquity) / result.adjustedOriginalEquity) * 100;
+      expect(equityChangePct).toBeCloseTo(12.5, 1);
     });
 
     it("treats 100% ownership same as no shared ownership", () => {
@@ -518,6 +529,7 @@ describe("calculateCurrentEquity", () => {
       };
       const result = calculateCurrentEquity(data, 4.2);
       expect(result.currentEquity).toBeCloseTo(result.adjustedEquity, 0);
+      expect(result.adjustedOriginalEquity).toBe(result.originalEquity);
       expect(result.sharedOwnershipPercent).toBe(100);
     });
 
@@ -530,121 +542,227 @@ describe("calculateCurrentEquity", () => {
       };
       const result = calculateCurrentEquity(data, 4.2);
       expect(result.currentEquity).toBeCloseTo(result.adjustedEquity, 0);
+      expect(result.adjustedOriginalEquity).toBe(result.originalEquity);
       expect(result.sharedOwnershipPercent).toBe(100);
     });
   });
 
-  describe("reserved equity", () => {
-    it("reserved equity is excluded from ownership split", () => {
+  describe("myEquityShare with shared ownership", () => {
+    it("applies net-change formula: myShare + netChange × SO%", () => {
       const data: MortgageData = {
         totalPropertyValue: 500000,
         equity: 200000,
         valuationDate: "2023-01-01",
         postcode: "SW1A 1AA",
         sharedOwnershipPercent: 50,
-        reservedEquity: 30000,
+        myEquityShare: 130000,
       };
       const result = calculateCurrentEquity(data, 0);
-      // Full equity = 200000
-      // sharedPool = 200000 - 30000 = 170000
-      // adjustedEquity = (170000 * 50/100) + 30000 = 85000 + 30000 = 115000
+      // netChange = 0 (no HPI, no principal)
+      // adjustedEquity = 130000 + (0 * 50/100) = 130000
+      // adjustedOriginalEquity = 130000
       expect(result.currentEquity).toBe(200000);
-      expect(result.adjustedEquity).toBe(115000);
+      expect(result.netChange).toBe(0);
+      expect(result.adjustedEquity).toBe(130000);
+      expect(result.adjustedOriginalEquity).toBe(130000);
       expect(result.sharedOwnershipPercent).toBe(50);
-      expect(result.reservedEquity).toBe(30000);
+      expect(result.myEquityShare).toBe(130000);
     });
 
-    it("reserved equity with HPI appreciation", () => {
+    it("splits only the net change, not the original equity", () => {
       const data: MortgageData = {
         totalPropertyValue: 500000,
         equity: 200000,
         valuationDate: "2023-01-01",
         postcode: "SW1A 1AA",
         sharedOwnershipPercent: 50,
-        reservedEquity: 30000,
+        myEquityShare: 130000,
       };
       const result = calculateCurrentEquity(data, 10);
       // Property value: 500000 * 1.10 = 550000
       // Outstanding: 300000
       // Full equity: 550000 - 300000 = 250000
-      // sharedPool = 250000 - 30000 = 220000
-      // adjustedEquity = (220000 * 50/100) + 30000 = 110000 + 30000 = 140000
+      // appreciation: 50000
+      // netChange = 0 (principal) + 50000 (appreciation) = 50000
+      // adjustedEquity = 130000 + (50000 * 50/100) = 130000 + 25000 = 155000
+      // adjustedOriginalEquity = 130000
       expect(result.currentEquity).toBeCloseTo(250000, 0);
-      expect(result.adjustedEquity).toBeCloseTo(140000, 0);
+      expect(result.netChange).toBeCloseTo(50000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(155000, 0);
+      expect(result.adjustedOriginalEquity).toBe(130000);
+      // Equity change % = (155000 - 130000) / 130000 ≈ 19.23%
+      const equityChangePct =
+        ((result.adjustedEquity - result.adjustedOriginalEquity) / result.adjustedOriginalEquity) * 100;
+      expect(equityChangePct).toBeCloseTo(19.23, 1);
     });
 
-    it("reserved equity without shared ownership has no effect", () => {
+    it("myEquityShare without shared ownership uses full equity (100%)", () => {
       const data: MortgageData = {
         totalPropertyValue: 350000,
         equity: 100000,
         valuationDate: "2023-01-01",
         postcode: "M1 1AA",
-        reservedEquity: 30000,
+        myEquityShare: 80000,
       };
       const result = calculateCurrentEquity(data, 0);
-      // No shared ownership (100%) — reserved equity doesn't matter
-      // sharedPool = 100000 - 30000 = 70000
-      // adjustedEquity = (70000 * 100/100) + 30000 = 100000 (same as currentEquity)
+      // 100% ownership, myEquityShare = 80000
+      // netChange = 0
+      // adjustedEquity = 80000 + (0 * 100/100) = 80000
+      // Wait — with 100% ownership and no SO configured, fast path: adjustedEquity = currentEquity = 100000
+      // myEquityShare only matters when sharedOwnershipPercent < 100
       expect(result.currentEquity).toBe(100000);
       expect(result.adjustedEquity).toBe(100000);
+      expect(result.adjustedOriginalEquity).toBe(100000);
     });
 
-    it("reserved equity with principal repayment and shared ownership", () => {
-      const data: MortgageData = {
-        totalPropertyValue: 500000,
-        equity: 200000,
-        valuationDate: "2023-01-01",
-        postcode: "SW1A 1AA",
-        sharedOwnershipPercent: 50,
-        reservedEquity: 30000,
-        mortgageRate: 4.5,
-        mortgageTerm: 25,
-        mortgageStartDate: "2023-01-01",
-      };
-      const result = calculateCurrentEquity(data, 0, "2025-01-01");
-      // With 0% HPI, equity = original + principal repaid
-      expect(result.principalRepaid).toBeGreaterThan(0);
-      expect(result.currentEquity).toBeGreaterThan(200000);
-      // Adjusted should apply shared ownership split with reserved carve-out
-      const expectedAdjusted = ((result.currentEquity - 30000) * 50) / 100 + 30000;
-      expect(result.adjustedEquity).toBeCloseTo(expectedAdjusted, 0);
-    });
-
-    it("handles zero reserved equity with shared ownership", () => {
-      const data: MortgageData = {
-        totalPropertyValue: 400000,
-        equity: 100000,
-        valuationDate: "2023-01-01",
-        postcode: "E1 1AA",
-        sharedOwnershipPercent: 60,
-        reservedEquity: 0,
-      };
-      const result = calculateCurrentEquity(data, 5);
-      // Property value: 400000 * 1.05 = 420000
-      // Outstanding: 300000
-      // Full equity: 420000 - 300000 = 120000
-      // adjustedEquity: 120000 * 60/100 = 72000
-      expect(result.currentEquity).toBeCloseTo(120000, 0);
-      expect(result.adjustedEquity).toBeCloseTo(72000, 0);
-    });
-
-    it("handles negative equity with shared ownership", () => {
+    it("handles negative net change with shared ownership", () => {
       const data: MortgageData = {
         totalPropertyValue: 300000,
         equity: 50000,
         valuationDate: "2023-01-01",
         postcode: "SW1A 1AA",
         sharedOwnershipPercent: 50,
-        reservedEquity: 10000,
+        myEquityShare: 30000,
       };
       const result = calculateCurrentEquity(data, -25);
       // Property value: 300000 * 0.75 = 225000
       // Outstanding: 250000
       // Full equity: 225000 - 250000 = -25000 (negative equity)
-      // sharedPool = -25000 - 10000 = -35000
-      // adjustedEquity = (-35000 * 50/100) + 10000 = -17500 + 10000 = -7500
+      // appreciation = -75000
+      // netChange = 0 + (-75000) = -75000
+      // adjustedEquity = 30000 + (-75000 * 50/100) = 30000 - 37500 = -7500
+      // adjustedOriginalEquity = 30000
       expect(result.currentEquity).toBeCloseTo(-25000, 0);
+      expect(result.netChange).toBeCloseTo(-75000, 0);
       expect(result.adjustedEquity).toBeCloseTo(-7500, 0);
+      expect(result.adjustedOriginalEquity).toBe(30000);
+    });
+
+    it("handles zero myEquityShare with shared ownership (same as no myEquityShare)", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 400000,
+        equity: 100000,
+        valuationDate: "2023-01-01",
+        postcode: "E1 1AA",
+        sharedOwnershipPercent: 60,
+        myEquityShare: 0,
+      };
+      const result = calculateCurrentEquity(data, 5);
+      // Property value: 400000 * 1.05 = 420000
+      // Outstanding: 300000
+      // Full equity: 420000 - 300000 = 120000
+      // myEquityShare = 0 → falls into "split full equity" branch
+      // adjustedEquity: 120000 * 60/100 = 72000
+      // adjustedOriginalEquity: 100000 * 60/100 = 60000
+      expect(result.currentEquity).toBeCloseTo(120000, 0);
+      expect(result.adjustedEquity).toBeCloseTo(72000, 0);
+      expect(result.adjustedOriginalEquity).toBeCloseTo(60000, 0);
+      const equityChangePct =
+        ((result.adjustedEquity - result.adjustedOriginalEquity) / result.adjustedOriginalEquity) * 100;
+      expect(equityChangePct).toBeCloseTo(20, 0);
+    });
+
+    it("myEquityShare with principal repayment", () => {
+      const data: MortgageData = {
+        totalPropertyValue: 500000,
+        equity: 200000,
+        valuationDate: "2023-01-01",
+        postcode: "SW1A 1AA",
+        sharedOwnershipPercent: 50,
+        myEquityShare: 130000,
+        mortgageRate: 4.5,
+        mortgageTerm: 25,
+        mortgageStartDate: "2023-01-01",
+      };
+      const result = calculateCurrentEquity(data, 0, "2025-01-01");
+      // With 0% HPI, netChange = principalRepaid + 0
+      expect(result.principalRepaid).toBeGreaterThan(0);
+      expect(result.netChange).toBeCloseTo(result.principalRepaid, 0);
+      // adjustedEquity = 130000 + (principalRepaid * 50/100)
+      const expectedAdjusted = 130000 + (result.principalRepaid * 50) / 100;
+      expect(result.adjustedEquity).toBeCloseTo(expectedAdjusted, 0);
+      expect(result.adjustedOriginalEquity).toBe(130000);
+    });
+  });
+
+  // ────────────────────────────────────────
+  // Real-Life Example Validation
+  // ────────────────────────────────────────
+
+  describe("real-life example", () => {
+    // Based on a real mortgage with bank-confirmed figures
+    const realData: MortgageData = {
+      totalPropertyValue: 470000,
+      equity: 47000,
+      valuationDate: "2022-09-01",
+      postcode: "SW1A 1AA",
+      mortgageRate: 2.5,
+      mortgageTerm: 30,
+      mortgageStartDate: "2022-09-01",
+      sharedOwnershipPercent: 60,
+      myEquityShare: 40000,
+    };
+
+    // HPI returned: -5.1%
+    const hpi = -5.1;
+
+    it("calculates correct property value after HPI", () => {
+      const result = calculateCurrentEquity(realData, hpi);
+      // 470000 * (1 - 0.051) = 470000 * 0.949 = 446030
+      expect(result.currentPropertyValue).toBeCloseTo(446030, 0);
+    });
+
+    it("calculates correct market appreciation", () => {
+      const result = calculateCurrentEquity(realData, hpi);
+      // 470000 * -0.051 = -23970
+      expect(result.appreciation).toBeCloseTo(-23970, 0);
+    });
+
+    it("calculates principal repaid in reasonable range", () => {
+      // Bank shows ~£32,022 over ~2.75 years (Sep 2022 to Jun 2025)
+      const result = calculateCurrentEquity(realData, hpi, "2025-06-01");
+      // Our amortization calculator should give a figure close to the bank's
+      // (minor differences possible due to exact payment dates, rounding,
+      // and the bank using actual calendar days vs our monthly model)
+      expect(result.principalRepaid).toBeGreaterThan(26000);
+      expect(result.principalRepaid).toBeLessThan(36000);
+    });
+
+    it("calculates net change correctly", () => {
+      const result = calculateCurrentEquity(realData, hpi, "2025-06-01");
+      // netChange = principalRepaid + appreciation
+      expect(result.netChange).toBeCloseTo(result.principalRepaid + result.appreciation, 0);
+    });
+
+    it("applies shared ownership to net change only, not to myEquityShare", () => {
+      const result = calculateCurrentEquity(realData, hpi, "2025-06-01");
+      // adjustedEquity = myEquityShare + (netChange × 60/100)
+      // = 40000 + (netChange × 0.6)
+      const expectedAdjusted = 40000 + (result.netChange * 60) / 100;
+      expect(result.adjustedEquity).toBeCloseTo(expectedAdjusted, 0);
+    });
+
+    it("adjustedOriginalEquity equals myEquityShare", () => {
+      const result = calculateCurrentEquity(realData, hpi, "2025-06-01");
+      expect(result.adjustedOriginalEquity).toBe(40000);
+    });
+
+    it("matches expected final equity from bank calculator (approximate)", () => {
+      // Bank shows: principal paid ≈ £32,022
+      // Market change: 470000 × -0.051 = -£23,970
+      // Net change: 32022 - 23970 = £8,052
+      // My share of change: 8052 × 0.6 = £4,831.20
+      // My final equity: 40000 + 4831.20 = £44,831.20
+      //
+      // Our calculator uses its own amortization, so principal may differ slightly.
+      // But the formula application should produce a result in the same ballpark.
+      const result = calculateCurrentEquity(realData, hpi, "2025-06-01");
+      // Verify the formula is applied correctly
+      expect(result.adjustedEquity).toBeCloseTo(40000 + (result.netChange * 60) / 100, 0);
+      // The result should be in the approximate range of the bank's figure
+      // (allowing for amortization differences)
+      expect(result.adjustedEquity).toBeGreaterThan(40000);
+      expect(result.adjustedEquity).toBeLessThan(50000);
     });
   });
 });

@@ -196,6 +196,7 @@ export function PositionListItem({
     baseCurrency,
     displayName,
     isRenamed,
+    hpiChangePercent,
     keywords,
     actions,
   });
@@ -218,6 +219,7 @@ interface ListModeProps {
   baseCurrency: string;
   displayName: string;
   isRenamed: boolean;
+  hpiChangePercent?: number;
   keywords: string[];
   actions: React.JSX.Element;
 }
@@ -254,6 +256,7 @@ function renderListMode({
   baseCurrency,
   displayName,
   isRenamed,
+  hpiChangePercent,
   keywords,
   actions,
 }: ListModeProps): React.JSX.Element {
@@ -285,15 +288,25 @@ function renderListMode({
     });
 
     // Change percentage (coloured tag)
-    accessories.push({
-      tag: {
-        value: formatPercent(changePercent),
-        color: changeColor,
-      },
-      tooltip: isProperty
-        ? `Change since valuation: ${formatPercent(changePercent)}`
-        : `Day change: ${formatPercent(changePercent)}`,
-    });
+    // Property: show "equityChange% / hpiChange%" with explanatory tooltip
+    // Securities: show day change as before
+    if (isProperty && hpiChangePercent !== undefined) {
+      accessories.push({
+        tag: {
+          value: `${formatPercent(changePercent)} / ${formatPercent(hpiChangePercent)}`,
+          color: changeColor,
+        },
+        tooltip: `Equity change / Market value change`,
+      });
+    } else {
+      accessories.push({
+        tag: {
+          value: formatPercent(changePercent),
+          color: changeColor,
+        },
+        tooltip: `Day change: ${formatPercent(changePercent)}`,
+      });
+    }
 
     // Total value / equity in base currency (rightmost = most prominent)
     accessories.push({
@@ -644,12 +657,40 @@ function buildPropertyDetail({
                     title="Ownership Share"
                     text={`${equityCalc.sharedOwnershipPercent}%`}
                   />
-                  {equityCalc.reservedEquity > 0 && (
+                  {equityCalc.myEquityShare > 0 && (
                     <List.Item.Detail.Metadata.Label
-                      title="Reserved Equity"
-                      text={formatCurrency(equityCalc.reservedEquity, position.currency)}
+                      title="My Share of Deposit"
+                      text={formatCurrency(equityCalc.myEquityShare, position.currency)}
                     />
                   )}
+                  <List.Item.Detail.Metadata.Label
+                    title="Net Change"
+                    text={{
+                      value: formatCurrency(equityCalc.netChange, position.currency, { showSign: true }),
+                      color:
+                        equityCalc.netChange > 0
+                          ? COLOR_POSITIVE
+                          : equityCalc.netChange < 0
+                            ? COLOR_NEGATIVE
+                            : COLOR_NEUTRAL,
+                    }}
+                  />
+                  <List.Item.Detail.Metadata.Label
+                    title="My Share of Change"
+                    text={{
+                      value: formatCurrency(
+                        (equityCalc.netChange * equityCalc.sharedOwnershipPercent) / 100,
+                        position.currency,
+                        { showSign: true },
+                      ),
+                      color:
+                        equityCalc.netChange > 0
+                          ? COLOR_POSITIVE
+                          : equityCalc.netChange < 0
+                            ? COLOR_NEGATIVE
+                            : COLOR_NEUTRAL,
+                    }}
+                  />
                   <List.Item.Detail.Metadata.Label
                     title="Your Equity"
                     text={formatCurrency(equityCalc.adjustedEquity, position.currency)}

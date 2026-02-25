@@ -296,12 +296,16 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
           const totalNativeValue = equityCalc.adjustedEquity;
           const totalBaseValue = totalNativeValue * fxRate;
 
-          // "Change" represents the equity change since valuation.
-          // HPI appreciation is applied to the FULL property value, then reflected
-          // through to equity. The percentage shown is equity-relative, not raw HPI.
-          const absoluteChange = equityCalc.adjustedEquity - equityCalc.originalEquity;
+          // Absolute change uses adjusted equity (post shared-ownership) for both
+          // current and original so the delta is consistent.
+          const absoluteChange = equityCalc.adjustedEquity - equityCalc.adjustedOriginalEquity;
+
+          // Equity change % uses the adjusted original as denominator — correct even
+          // when shared ownership is configured. HPI % is passed alongside for display.
           const equityChangePercent =
-            equityCalc.originalEquity > 0 ? (absoluteChange / equityCalc.originalEquity) * 100 : hpiChangePercent;
+            equityCalc.adjustedOriginalEquity > 0
+              ? (absoluteChange / equityCalc.adjustedOriginalEquity) * 100
+              : hpiChangePercent;
 
           return {
             position,
@@ -309,9 +313,9 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
             totalNativeValue,
             totalBaseValue,
             change: absoluteChange,
-            changePercent: equityChangePercent,
+            changePercent: equityChangePercent, // equity-relative % (shared-ownership aware)
             fxRate,
-            hpiChangePercent, // raw HPI % for the detail panel
+            hpiChangePercent, // raw HPI % for the tag and detail panel
           };
         }
 

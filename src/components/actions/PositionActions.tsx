@@ -69,6 +69,13 @@ interface PositionActionsProps {
   onAddValuation?: () => void;
 
   /**
+   * Callback to show the full calculation breakdown for a property position.
+   * Pushes a MortgageCalculationsDetail view onto the navigation stack.
+   * Only used for property positions.
+   */
+  onShowCalculations?: () => void;
+
+  /**
    * Callback to delete this position from the account.
    * The component handles the confirmation dialog internally.
    */
@@ -97,10 +104,10 @@ interface PositionActionsProps {
  * - ⇧⌘U → Add Units (non-property only)
  * - ⌘E → Edit Asset
  * - ⇧⌘V → Add Valuation (property only)
+ * - ⌥⌘K → Show Calculations (property only)
  * - ⌃X → Remove Position (with confirmation)
  * - ⌘C → Copy Symbol
  * - ⇧⌘C → Copy Name
- * - ⌥⌘C → Copy Original Name (when renamed)
  */
 export function PositionActions({
   position,
@@ -110,6 +117,7 @@ export function PositionActions({
   onAddUnits,
   onEditPosition,
   onAddValuation,
+  onShowCalculations,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
   const displayName = getDisplayName(position);
@@ -157,6 +165,15 @@ export function PositionActions({
                 icon={Icon.Calendar}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "v" }}
                 onAction={onAddValuation}
+              />
+            )}
+
+            {onShowCalculations && (
+              <Action
+                title="Show Calculations"
+                icon={Icon.Calculator}
+                shortcut={{ modifiers: ["cmd", "opt"], key: "k" }}
+                onAction={onShowCalculations}
               />
             )}
           </>

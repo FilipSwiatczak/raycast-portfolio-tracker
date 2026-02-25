@@ -90,6 +90,9 @@ export interface PortfolioListProps {
   /** Navigate to the "Edit Property" form for a MORTGAGE/OWNED_PROPERTY position */
   onEditPropertyPosition: (account: Account, position: Position) => void;
 
+  /** Show the full calculation breakdown for a property position */
+  onShowCalculations: (position: Position, hpiChangePercent: number) => void;
+
   /** Navigate to the "Edit Position" form for a specific position */
   onEditPosition: (account: Account, position: Position) => void;
 
@@ -128,6 +131,7 @@ export function PortfolioList({
   onAddCash,
   onAddProperty,
   onEditPropertyPosition,
+  onShowCalculations,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -295,6 +299,7 @@ export function PortfolioList({
           onAddCash={onAddCash}
           onAddProperty={onAddProperty}
           onEditPropertyPosition={onEditPropertyPosition}
+          onShowCalculations={onShowCalculations}
           onEditPosition={onEditPosition}
           onAddUnits={onAddUnits}
           onDeletePosition={onDeletePosition}
@@ -342,6 +347,7 @@ interface AccountSectionProps {
   onAddCash: (accountId: string) => void;
   onAddProperty: (accountId: string) => void;
   onEditPropertyPosition: (account: Account, position: Position) => void;
+  onShowCalculations: (position: Position, hpiChangePercent: number) => void;
   onEditPosition: (account: Account, position: Position) => void;
   onAddUnits: (account: Account, position: Position) => void;
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
@@ -363,6 +369,7 @@ function AccountSection({
   onAddCash,
   onAddProperty,
   onEditPropertyPosition,
+  onShowCalculations,
   onEditPosition,
   onAddUnits,
   onDeletePosition,
@@ -443,6 +450,11 @@ function AccountSection({
                   }
                   onAddValuation={
                     isPropertyPos ? () => onEditPropertyPosition(account, positionVal.position) : undefined
+                  }
+                  onShowCalculations={
+                    isPropertyPos
+                      ? () => onShowCalculations(positionVal.position, positionVal.hpiChangePercent ?? 0)
+                      : undefined
                   }
                   onDeletePosition={() => onDeletePosition(account.id, positionVal.position.id)}
                 />

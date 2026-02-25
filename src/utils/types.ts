@@ -165,12 +165,15 @@ export interface MortgageData {
   sharedOwnershipPercent?: number;
 
   /**
-   * Reserved equity amount that belongs solely to the user, excluded from
-   * the shared ownership split (e.g. £30,000 extra deposit contribution).
-   * Deducted from equity before the shared ownership modifier is applied,
-   * then added back to the user's share afterwards.
+   * The user's own share of the deposit/equity at valuation time.
+   * When shared ownership is configured, this is the portion that belongs
+   * solely to this user (e.g. £40,000 of a £47,000 joint deposit).
+   *
+   * The shared ownership ratio is applied only to the NET CHANGE
+   * (principal repaid + market appreciation) — not to this amount.
+   * Final equity = myEquityShare + (netChange × sharedOwnershipPercent / 100).
    */
-  reservedEquity?: number;
+  myEquityShare?: number;
 }
 
 /**

@@ -26,6 +26,7 @@ import { AddUnitsForm } from "./components/AddUnitsForm";
 import { AddCashForm } from "./components/AddCashForm";
 import { AddMortgageForm } from "./components/AddMortgageForm";
 import { EditMortgageForm } from "./components/EditMortgageForm";
+import { MortgageCalculationsDetail } from "./components/MortgageCalculationsDetail";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
 import { SearchInvestmentsFlow } from "./components/SearchInvestmentsFlow";
 import { BatchRenameMatch } from "./components/BatchRenameForm";
@@ -235,6 +236,19 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  function handleShowCalculations(position: Position, hpiChangePercent: number): void {
+    if (!isPropertyAssetType(position.assetType)) return;
+
+    push(
+      <MortgageCalculationsDetail
+        position={position}
+        hpiChangePercent={hpiChangePercent}
+        baseCurrency={baseCurrency}
+        onDone={() => pop()}
+      />,
+    );
+  }
+
   function handleEditPropertyPosition(account: Account, position: Position): void {
     if (!isPropertyAssetType(position.assetType)) return;
 
@@ -333,6 +347,7 @@ export default function PortfolioCommand(): React.JSX.Element {
       onAddCash={handleAddCash}
       onAddProperty={handleAddProperty}
       onEditPropertyPosition={handleEditPropertyPosition}
+      onShowCalculations={handleShowCalculations}
       onEditPosition={handleEditPosition}
       onAddUnits={handleAddUnits}
       onDeletePosition={handleDeletePosition}

@@ -19,8 +19,15 @@ import { MortgageData, hasMortgageRepaymentData } from "../utils/types";
 
 /** Result of the current equity calculation */
 export interface EquityCalculation {
-  /** Original equity at time of valuation */
+  /** Original equity at time of valuation (all partners combined) */
   originalEquity: number;
+
+  /**
+   * The user's own share of equity at valuation (= myEquityShare from MortgageData).
+   * Equals `originalEquity` when no shared ownership is configured.
+   * Used as the denominator for equity change % calculations.
+   */
+  adjustedOriginalEquity: number;
 
   /** Cumulative principal repaid since valuation date (0 if no repayment data) */
   principalRepaid: number;
@@ -28,16 +35,22 @@ export interface EquityCalculation {
   /** Value gained from property price appreciation (can be negative) */
   appreciation: number;
 
-  /** Current total equity = originalEquity + principalRepaid + appreciation */
+  /** Current total equity = originalEquity + principalRepaid + appreciation (all partners) */
   currentEquity: number;
 
   /**
-   * User's adjusted equity after shared ownership split and reserved equity.
+   * Net change since valuation = principalRepaid + appreciation.
+   * This is the new value created (or lost) that gets split by shared ownership.
+   */
+  netChange: number;
+
+  /**
+   * User's final equity after shared ownership adjustment.
    * Equals `currentEquity` when no shared ownership is configured.
    *
    * Formula:
-   *   sharedPool = currentEquity - reservedEquity
-   *   adjustedEquity = (sharedPool × sharedOwnershipPercent / 100) + reservedEquity
+   *   netChange = principalRepaid + appreciation
+   *   adjustedEquity = myEquityShare + (netChange × sharedOwnershipPercent / 100)
    */
   adjustedEquity: number;
 
@@ -53,8 +66,8 @@ export interface EquityCalculation {
   /** Shared ownership percentage applied (100 if sole ownership / not configured) */
   sharedOwnershipPercent: number;
 
-  /** Reserved equity amount excluded from the shared split (0 if not configured) */
-  reservedEquity: number;
+  /** User's own share of the deposit/equity at valuation (0 if not configured) */
+  myEquityShare: number;
 }
 
 /** Principal and interest breakdown for a single monthly payment */
@@ -343,32 +356,48 @@ export function calculateCurrentEquity(
   const currentEquity = currentPropertyValue - outstandingBalance;
 
   // ── Shared ownership adjustment ──
-  // 1. Deduct reserved equity from the pool
-  // 2. Apply shared ownership percentage to the remainder
-  // 3. Add reserved equity back (it belongs solely to the user)
+  // The net change (principal repaid + market appreciation) is the new value
+  // created since valuation. Shared ownership splits only the net change.
+  // myEquityShare is the user's own portion of the original deposit — unaffected
+  // by the ownership ratio.
+  //
+  // Formula:
+  //   netChange = principalRepaid + appreciation
+  //   adjustedEquity = myEquityShare + (netChange × ownershipPercent / 100)
   const ownershipPercent = mortgageData.sharedOwnershipPercent ?? 100;
-  const reserved = mortgageData.reservedEquity ?? 0;
+  const myShare = mortgageData.myEquityShare ?? 0;
+  const netChange = principalRepaid + appreciation;
 
   let adjustedEquity: number;
-  if (ownershipPercent >= 100 && reserved <= 0) {
-    // No shared ownership, no reserved equity — fast path
+  let adjustedOriginalEquity: number;
+
+  if (ownershipPercent >= 100) {
+    // Sole ownership (100%) — myEquityShare is irrelevant, user owns everything
     adjustedEquity = currentEquity;
+    adjustedOriginalEquity = equity;
+  } else if (myShare <= 0) {
+    // Shared ownership but no personal share specified — split full equity
+    adjustedEquity = (currentEquity * ownershipPercent) / 100;
+    adjustedOriginalEquity = (equity * ownershipPercent) / 100;
   } else {
-    const sharedPool = currentEquity - reserved;
-    adjustedEquity = (sharedPool * ownershipPercent) / 100 + reserved;
+    // Full model: user's share of deposit + their share of the net change
+    adjustedEquity = myShare + (netChange * ownershipPercent) / 100;
+    adjustedOriginalEquity = myShare; // at valuation time, net change was 0
   }
 
   return {
     originalEquity: equity,
+    adjustedOriginalEquity,
     principalRepaid,
     appreciation,
     currentEquity,
+    netChange,
     adjustedEquity,
     currentPropertyValue,
     outstandingBalance,
     hpiChangePercent,
     sharedOwnershipPercent: ownershipPercent,
-    reservedEquity: reserved,
+    myEquityShare: myShare,
   };
 }
 
