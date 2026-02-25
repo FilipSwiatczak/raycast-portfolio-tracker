@@ -12,10 +12,6 @@
  * The two series are visually stacked: growth on the left, contributions on
  * the right, so each bar's total width represents the full projected value.
  *
- * When debt data is present, a red frame (stroke outline) is overlaid on
- * each bar showing how much of the portfolio would be consumed by debt.
- * The debt value label is displayed in red at the bar's right end.
- *
  * Additional visual elements:
  *   - Optional chart title/caption
  *   - Inline value labels on each bar segment (when wide enough)
@@ -97,24 +93,6 @@ export interface ChartBar {
 
   /** Pre-formatted contribution segment label (e.g. "£50K"). Optional. */
   contribLabel?: string;
-
-  /**
-   * Cumulative outstanding debt value (absolute, positive number).
-   * When present, rendered as a red frame (stroke outline) over the
-   * rightmost portion of the bar, visually showing how debt eats into
-   * the portfolio. If debtValue >= totalValue the frame covers the
-   * entire bar and the right-side label shows negative net equity.
-   */
-  debtValue?: number;
-
-  /** Pre-formatted debt label shown in red at the bar's right end (e.g. "£15K") */
-  debtLabel?: string;
-
-  /**
-   * Pre-formatted net equity label when debt exceeds totalValue.
-   * Shown on the right side in place of `label` (e.g. "-£5K").
-   */
-  netLabel?: string;
 }
 
 /** Configuration passed alongside the bar data. */
@@ -180,8 +158,7 @@ interface ThemePalette {
   baseGrowth: SvgColor;
   /** Colour for the contribution impact segment */
   contributions: SvgColor;
-  /** Colour for the debt frame stroke and debt label text */
-  debt: SvgColor;
+
   /** Colour for the target value vertical marker line */
   targetLine: SvgColor;
   /** Semi-transparent row highlight for the FIRE year */
@@ -211,7 +188,7 @@ const PALETTES: Record<"light" | "dark", ThemePalette> = {
     barTrack: { hex: "#FFFFFF", opacity: 0.06 },
     baseGrowth: { hex: "#FFFFFF", opacity: 0.75 },
     contributions: solid("#4A9EFF"),
-    debt: solid("#FF453A"),
+
     targetLine: solid("#FF9F0A"),
     fireHighlight: { hex: "#34C759", opacity: 0.12 },
     fireAccent: solid("#34C759"),
@@ -226,7 +203,7 @@ const PALETTES: Record<"light" | "dark", ThemePalette> = {
     barTrack: { hex: "#000000", opacity: 0.06 },
     baseGrowth: { hex: "#000000", opacity: 0.55 },
     contributions: solid("#007AFF"),
-    debt: solid("#FF3B30"),
+
     targetLine: solid("#FF9500"),
     fireHighlight: { hex: "#34C759", opacity: 0.1 },
     fireAccent: solid("#34C759"),
@@ -310,8 +287,6 @@ const CLS = {
   track: "c-track",
   base: "c-base",
   contrib: "c-contrib",
-  debt: "c-debt",
-  debtLbl: "c-debt-lbl",
   target: "c-target",
   fireHl: "c-fire-hl",
   fire: "c-fire",
@@ -371,9 +346,6 @@ export const LEGEND_ITEM_GAP = 16;
 /** Size of the legend colour swatch square */
 export const LEGEND_SWATCH = 10;
 
-/** Stroke width for the debt frame outline */
-const DEBT_FRAME_STROKE = 1.5;
-
 // ──────────────────────────────────────────
 // CSS Builder
 // ──────────────────────────────────────────
@@ -400,8 +372,6 @@ function buildThemeStyleBlock(): string {
     `.${CLS.track} { ${cssFillRule(light.barTrack)} }`,
     `.${CLS.base} { ${cssFillRule(light.baseGrowth)} }`,
     `.${CLS.contrib} { ${cssFillRule(light.contributions)} }`,
-    `.${CLS.debt} { ${cssStrokeRule(light.debt)} fill: none; }`,
-    `.${CLS.debtLbl} { ${cssFillRule(light.debt)} }`,
     `.${CLS.target} { ${cssStrokeRule(light.targetLine)} }`,
     `.${CLS.fireHl} { ${cssFillRule(light.fireHighlight)} }`,
     `.${CLS.fire} { ${cssFillRule(light.fireAccent)} }`,
@@ -417,8 +387,6 @@ function buildThemeStyleBlock(): string {
     `.${CLS.track} { ${cssFillRule(dark.barTrack)} }`,
     `.${CLS.base} { ${cssFillRule(dark.baseGrowth)} }`,
     `.${CLS.contrib} { ${cssFillRule(dark.contributions)} }`,
-    `.${CLS.debt} { ${cssStrokeRule(dark.debt)} fill: none; }`,
-    `.${CLS.debtLbl} { ${cssFillRule(dark.debt)} }`,
     `.${CLS.target} { ${cssStrokeRule(dark.targetLine)} }`,
     `.${CLS.fireHl} { ${cssFillRule(dark.fireHighlight)} }`,
     `.${CLS.fire} { ${cssFillRule(dark.fireAccent)} }`,
@@ -468,9 +436,6 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
   const { targetValue, targetLabel, targetYear, theme, title } = config;
   const palette = PALETTES[theme];
 
-  // ── Check if any bar has debt data ──
-  const hasDebt = bars.some((b) => (b.debtValue ?? 0) > 0);
-
   // ── Dimensions ──
 
   const hasTitle = !!title;
@@ -485,17 +450,8 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
 
   // ── Scale ──
   // The bar area maps [0 … maxValue] → [0 … barAreaWidth]
-  // When debt exceeds equity on any bar, the effective bar extends beyond
-  // the equity total, so maxValue must account for the larger of
-  // totalValue or debtValue for proper scaling.
 
-  const maxValue = Math.max(
-    ...bars.map((b) => {
-      const debt = b.debtValue ?? 0;
-      return debt > b.totalValue ? debt : b.totalValue;
-    }),
-    targetValue,
-  );
+  const maxValue = Math.max(...bars.map((b) => b.totalValue), targetValue);
   if (maxValue <= 0) return "";
 
   const scaleX = (value: number): number => (value / maxValue) * barAreaWidth;
@@ -591,60 +547,15 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
     );
   }
 
-  // ── 6b. Debt frame overlay ──
-  //
-  // Debt is rendered as a RED stroke-only frame (no fill) on each bar
-  // that has a debtValue, overlaid on the rightmost portion. This is a
-  // subtle outline showing how much of the portfolio debt would consume.
-  //
-  // Three cases:
-  //   A) debt < totalValue → frame covers the rightmost `debtValue` portion
-  //   B) debt == totalValue → frame covers the entire bar
-  //   C) debt > totalValue → frame extends rightward past the equity bar
-
-  if (hasDebt) {
-    for (let i = 0; i < bars.length; i++) {
-      const bar = bars[i];
-      const debt = bar.debtValue ?? 0;
-      if (debt <= 0) continue;
-
-      const y = padTop + i * ROW_HEIGHT;
-      const halfStroke = DEBT_FRAME_STROKE / 2;
-
-      if (debt <= bar.totalValue) {
-        // Case A/B: frame covers rightmost portion of equity bar
-        const debtW = scaleX(debt);
-        const equityW = scaleX(bar.totalValue);
-        const frameX = padLeft + equityW - debtW;
-
-        elements.push(
-          `<rect class="${CLS.debt}" x="${frameX + halfStroke}" y="${y + halfStroke}" ` +
-            `width="${Math.max(0, debtW - DEBT_FRAME_STROKE)}" height="${BAR_HEIGHT - DEBT_FRAME_STROKE}" ` +
-            `${strokeAttr(palette.debt)} stroke-width="${DEBT_FRAME_STROKE}" fill="none" rx="2" />`,
-        );
-      } else {
-        // Case C: debt exceeds equity — frame extends rightward from left edge
-        const debtW = scaleX(debt);
-
-        elements.push(
-          `<rect class="${CLS.debt}" x="${padLeft + halfStroke}" y="${y + halfStroke}" ` +
-            `width="${Math.max(0, debtW - DEBT_FRAME_STROKE)}" height="${BAR_HEIGHT - DEBT_FRAME_STROKE}" ` +
-            `${strokeAttr(palette.debt)} stroke-width="${DEBT_FRAME_STROKE}" fill="none" rx="2" />`,
-        );
-      }
-    }
-  }
-
   // ── 7. Inline bar value labels ──
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
-    const debt = bar.debtValue ?? 0;
     const textY = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_BAR_LABEL * 0.38;
 
-    // Base growth label (skip if debt has consumed the entire equity bar)
+    // Base growth label
     const baseW = scaleX(bar.baseGrowthValue);
-    if (bar.baseLabel && baseW >= MIN_LABEL_WIDTH && debt <= bar.totalValue) {
+    if (bar.baseLabel && baseW >= MIN_LABEL_WIDTH) {
       elements.push(
         `<text class="${CLS.baseLbl}" x="${padLeft + 4}" y="${textY}" ` +
           `${fillAttr(palette.baseBarLabel)} font-size="${FONT_SIZE_BAR_LABEL}" ` +
@@ -660,18 +571,6 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
         `<text class="${CLS.contribLbl}" x="${contribX}" y="${textY}" ` +
           `${fillAttr(palette.contribBarLabel)} font-size="${FONT_SIZE_BAR_LABEL}" ` +
           `font-family="${FONT_FAMILY}" text-anchor="start">${bar.contribLabel}</text>`,
-      );
-    }
-
-    // Debt label — shown in RED at the right end of the bar
-    if (debt > 0 && bar.debtLabel) {
-      const barRightEdge = debt <= bar.totalValue ? padLeft + scaleX(bar.totalValue) : padLeft + scaleX(debt);
-
-      // Position the debt label just after the bar's right edge
-      elements.push(
-        `<text class="${CLS.debtLbl}" x="${barRightEdge + 4}" y="${textY}" ` +
-          `${fillAttr(palette.debt)} font-size="${FONT_SIZE_BAR_LABEL}" font-weight="600" ` +
-          `font-family="${FONT_FAMILY}" text-anchor="start">${bar.debtLabel}</text>`,
       );
     }
   }
@@ -704,7 +603,6 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
-    const debt = bar.debtValue ?? 0;
     const y = padTop + i * ROW_HEIGHT + BAR_HEIGHT / 2 + FONT_SIZE_LABEL * 0.38;
     const cls = bar.isFireYear ? CLS.fire : CLS.muted;
     const color = bar.isFireYear ? palette.fireAccent : palette.mutedText;
@@ -717,20 +615,17 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
     }
     const suffix = markerParts.length > 0 ? `  ${markerParts.join(" ")}` : "";
 
-    // When debt exceeds equity, show the negative net value on the right
-    const displayLabel = debt > bar.totalValue ? (bar.netLabel ?? bar.label) : bar.label;
-
     elements.push(
       `<text class="${cls}" x="${SVG_WIDTH - padRight + 6}" y="${y}" ` +
         `${fillAttr(color)} font-size="${FONT_SIZE_LABEL}" ` +
-        `font-family="${FONT_FAMILY}" text-anchor="start">${displayLabel}${suffix}</text>`,
+        `font-family="${FONT_FAMILY}" text-anchor="start">${bar.label}${suffix}</text>`,
     );
   }
 
   // ── 11. Legend ──
 
   const legendY = padTop + chartAreaHeight + LEGEND_HEIGHT - 4;
-  const legendElements = buildLegend(palette, targetLabel, legendY, padLeft, padRight, hasDebt);
+  const legendElements = buildLegend(palette, targetLabel, legendY, padLeft, padRight);
   elements.push(...legendElements);
 
   // ── Assemble SVG ──
@@ -751,14 +646,13 @@ export function buildProjectionSVG(bars: ChartBar[], config: ChartConfig): strin
 /**
  * Builds the legend row at the bottom of the chart.
  *
- * Layout:  ■ Base   ■ Contributions   ▭ Debt   │ £1.0M Target
+ * Layout:  ■ Base   ■ Contributions   │ £1.0M Target
  *
  * @param palette     - Active theme palette
  * @param targetLabel - Pre-formatted target value string
  * @param y           - Y-coordinate for the legend baseline
  * @param padLeft     - Left padding for alignment
  * @param padRight   - Right padding (reserved)
- * @param hasDebt     - Whether to include the Debt legend item
  * @returns Array of SVG element strings
  */
 function buildLegend(
@@ -767,7 +661,6 @@ function buildLegend(
   y: number,
   padLeft: number,
   padRight: number,
-  hasDebt: boolean = false,
 ): string[] {
   const els: string[] = [];
   let x = padLeft ? padLeft : padRight ? SVG_WIDTH - padRight : 0;
@@ -795,20 +688,6 @@ function buildLegend(
       `font-family="${FONT_FAMILY}">Contributions</text>`,
   );
   x += measureText("Contributions", FONT_SIZE_LEGEND) + LEGEND_ITEM_GAP;
-
-  // ── Debt swatch + label (frame outline style, only when debt is present) ──
-  if (hasDebt) {
-    els.push(
-      `<rect class="${CLS.debt}" x="${x}" y="${y - LEGEND_SWATCH + 1}" width="${LEGEND_SWATCH}" height="${LEGEND_SWATCH}" ` +
-        `${strokeAttr(palette.debt)} stroke-width="1.5" fill="none" rx="1" />`,
-    );
-    x += LEGEND_SWATCH + 5;
-    els.push(
-      `<text class="${CLS.legend}" x="${x}" y="${y}" ${fillAttr(palette.legendText)} font-size="${FONT_SIZE_LEGEND}" ` +
-        `font-family="${FONT_FAMILY}">Debt</text>`,
-    );
-    x += measureText("Debt", FONT_SIZE_LEGEND) + LEGEND_ITEM_GAP;
-  }
 
   // ── Target line indicator + label ──
   const lineY = y - LEGEND_SWATCH / 2 + 1;

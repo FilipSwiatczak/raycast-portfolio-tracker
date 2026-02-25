@@ -235,8 +235,7 @@ export function buildDashboardMarkdown(
 
   growthSummary = buildGrowthChartSummary(projection, settings, baseCurrency);
 
-  const totalDebt = debtData?.totalDebt ?? 0;
-  const chartBars = computeChartBars(projection, baseCurrency, totalDebt);
+  const chartBars = computeChartBars(projection, baseCurrency);
   const chartConfig: ChartConfig = {
     targetValue: projection.targetValue,
     targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
@@ -488,16 +487,11 @@ export function buildSplitChartSummary(
  * Each bar also includes pre-formatted labels for inline display on the
  * bar segments.
  *
- * When `totalDebt > 0`, each bar also carries the debt value as an overlay
- * field. The debt value stays constant across all years (it represents the
- * current snapshot — the Debt Projection SVG shows how it declines).
- *
  * @param projection   - Full FIRE projection result
  * @param baseCurrency - Currency code for label formatting
- * @param totalDebt    - Current cumulative debt (positive number, default 0)
  * @returns Array of ChartBar objects ready for the SVG builder
  */
-export function computeChartBars(projection: FireProjection, baseCurrency: string, totalDebt: number = 0): ChartBar[] {
+export function computeChartBars(projection: FireProjection, baseCurrency: string): ChartBar[] {
   const { years, currentPortfolioValue, realGrowthRate } = projection;
   if (years.length === 0) return [];
 
@@ -516,12 +510,6 @@ export function computeChartBars(projection: FireProjection, baseCurrency: strin
     const isFireYear = yearData.isTargetHit && !prevTargetHit;
     prevTargetHit = yearData.isTargetHit;
 
-    // Overlay debt on ALL bars — the debt is a constant snapshot showing
-    // how current debt compares to the projected portfolio at each year.
-    // As the portfolio grows the red frame shrinks proportionally.
-    const debtValue = totalDebt > 0 ? totalDebt : undefined;
-    const netEquity = debtValue !== undefined ? yearData.portfolioValue - debtValue : yearData.portfolioValue;
-
     return {
       year: yearData.year,
       label: formatCompactValue(yearData.portfolioValue, baseCurrency),
@@ -531,12 +519,6 @@ export function computeChartBars(projection: FireProjection, baseCurrency: strin
       isFireYear,
       baseLabel: formatCompactValue(baseGrowthValue, baseCurrency),
       contribLabel: contributionValue > 0 ? formatCompactValue(contributionValue, baseCurrency) : undefined,
-      debtValue,
-      debtLabel: debtValue !== undefined ? formatCompactValue(debtValue, baseCurrency) : undefined,
-      netLabel:
-        debtValue !== undefined && debtValue > yearData.portfolioValue
-          ? formatCompactValue(netEquity, baseCurrency)
-          : undefined,
     };
   });
 }
@@ -591,6 +573,7 @@ export function computeDebtChartBars(
   const bars: DebtChartBar[] = [];
   let cumulativeInterest = 0;
   let prevDebtFreeHit = false;
+  let yearInterestAccrued = 0;
 
   // Helper: aggregate totals across all positions
   const aggregate = () => {
@@ -633,6 +616,7 @@ export function computeDebtChartBars(
       const monthlyRate = ps.apr / 12 / 100;
       const interest = totalBalance * monthlyRate;
       cumulativeInterest += interest;
+      yearInterestAccrued += interest;
       ps.interestInBalance += interest;
 
       // 2. Apply repayment — covers interest first, then principal
@@ -665,20 +649,29 @@ export function computeDebtChartBars(
       prevDebtFreeHit = prevDebtFreeHit || agg.totalDebt <= 0.01;
 
       const effectiveDebt = agg.totalDebt <= 0.01 ? 0 : agg.totalDebt;
-      const effectivePrincipal = agg.totalDebt <= 0.01 ? 0 : agg.totalPrincipal;
-      const effectiveInterest = agg.totalDebt <= 0.01 ? 0 : agg.totalInterest;
+
+      // Visual interest split: use the interest accrued during this year
+      // (clamped to remaining debt) so the yellow bar always appears when
+      // interest was charged, even if repayments fully covered it each month.
+      // When repayment > interest, interestInBalance at snapshot is 0 but
+      // yearInterestAccrued correctly reflects the cost of debt.
+      const visualInterest = effectiveDebt > 0 ? Math.min(yearInterestAccrued, effectiveDebt) : 0;
+      const visualPrincipal = effectiveDebt > 0 ? effectiveDebt - visualInterest : 0;
 
       bars.push({
         year: yearNum,
         label: formatCompactValue(effectiveDebt, baseCurrency),
         totalDebt: effectiveDebt,
-        principalRemaining: effectivePrincipal,
-        interestInBalance: effectiveInterest,
-        principalLabel: effectivePrincipal > 0 ? formatCompactValue(effectivePrincipal, baseCurrency) : "",
-        interestLabel: effectiveInterest > 0 ? formatCompactValue(effectiveInterest, baseCurrency) : "",
+        principalRemaining: visualPrincipal,
+        interestInBalance: visualInterest,
+        principalLabel: visualPrincipal > 0 ? formatCompactValue(visualPrincipal, baseCurrency) : "",
+        interestLabel: visualInterest > 0 ? formatCompactValue(visualInterest, baseCurrency) : "",
         cumulativeInterest,
         isDebtFreeYear,
       });
+
+      // Reset yearly interest tracker for the next 12-month cycle
+      yearInterestAccrued = 0;
 
       // Stop projecting 2 years after debt is fully paid
       if (agg.totalDebt <= 0.01) {
