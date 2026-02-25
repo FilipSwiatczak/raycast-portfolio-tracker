@@ -51,7 +51,7 @@
    - Detail panel: outstanding balance, APR, monthly repayment, repayment day, loan progress, portfolio impact, original balance
    - FIRE integration: debt positions selectable as contribution targets (repayment = contribution)
    - 66 new unit tests for debt calculator (563 total) covering amortisation, monthly updates, repayment counting, loan progress, edge cases, and real-world scenarios (credit card, BNPL, student loan, auto loan)
-     7.1. **Debt SVG Visualisations**
+     7.1. **Debt SVG Visualisations** ✅
      On the SVG graph of Growth the Debt positions cumulative could be shown as as RED "|$ $ $|" overlayed on the very right end of the stacked bars - so it's an intuitive visualisation of Debt eating into the portfolio size.
      If debt reaches 100% of Equity or more it would first move right-to-left covering the Equity stack - then when too large it would be shown as a regular bar growing to the right with the total Equity marker on the right hand side of the bar showing negative value.
 

@@ -486,7 +486,7 @@ export function buildSplitProjectionSVG(bars: SplitChartBar[], config: SplitChar
   // ── Assemble SVG ──
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_WIDTH}" height="${svgHeight}" viewBox="0 0 ${SVG_WIDTH} ${svgHeight}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SVG_WIDTH} ${svgHeight}">`,
     ...elements.map((el) => `  ${el}`),
     `</svg>`,
   ].join("\n");

@@ -32,6 +32,7 @@
 import { FireProjection, FireProjectionYear, FireSettings, FireContribution } from "./fire-types";
 import { buildProjectionSVG, ChartBar, ChartConfig } from "./fire-svg";
 import { buildSplitProjectionSVG, SplitChartBar, SplitChartConfig } from "./fire-svg-split";
+import { buildDebtProjectionSVG, DebtChartBar, DebtChartConfig } from "./fire-svg-debt";
 
 // ──────────────────────────────────────────
 // Dashboard Result Type
@@ -54,11 +55,17 @@ export interface DashboardMarkdownResult {
   /** Raw SVG string for the accessible-vs-locked split chart, or null */
   splitSvg: string | null;
 
+  /** Raw SVG string for the debt repayment projection chart, or null */
+  debtSvg: string | null;
+
   /** Human-readable calculation summary for the growth chart */
   growthSummary: string | null;
 
   /** Human-readable calculation summary for the split chart */
   splitSummary: string | null;
+
+  /** Human-readable calculation summary for the debt chart */
+  debtSummary: string | null;
 }
 
 // ──────────────────────────────────────────
@@ -103,6 +110,40 @@ export interface SplitPortfolioData {
 }
 
 // ──────────────────────────────────────────
+// Debt Portfolio Data
+// ──────────────────────────────────────────
+
+/**
+ * A single debt position's data for the debt projection chart.
+ *
+ * Passed by the component after extracting debt positions from the portfolio.
+ */
+export interface DebtPositionData {
+  /** Human-readable name (e.g. "Barclaycard", "Student Loan") */
+  name: string;
+  /** Current outstanding balance (positive number) */
+  currentBalance: number;
+  /** Annual Percentage Rate as a percentage (e.g. 19.9) */
+  apr: number;
+  /** Monthly repayment amount */
+  monthlyRepayment: number;
+}
+
+/**
+ * Aggregate debt data for the FIRE dashboard.
+ *
+ * When `totalDebt > 0`, the dashboard renders:
+ *   1. A red debt overlay on the growth SVG chart
+ *   2. A separate Debt Projection SVG chart (3rd chart)
+ */
+export interface DebtPortfolioData {
+  /** Sum of all outstanding debt balances (positive number) */
+  totalDebt: number;
+  /** Individual debt positions (for segmented projection) */
+  positions: DebtPositionData[];
+}
+
+// ──────────────────────────────────────────
 // Main Dashboard Builder
 // ──────────────────────────────────────────
 
@@ -133,14 +174,17 @@ export function buildDashboardMarkdown(
   contributions: Array<FireContribution & { displayName: string; accountName: string }>,
   theme: "light" | "dark" = "dark",
   splitData?: SplitPortfolioData,
+  debtData?: DebtPortfolioData,
 ): DashboardMarkdownResult {
   const lines: string[] = [];
 
   // Track raw SVGs for the result
   let growthSvg: string | null = null;
   let splitSvg: string | null = null;
+  let debtSvg: string | null = null;
   let growthSummary: string | null = null;
   let splitSummary: string | null = null;
+  let debtSummary: string | null = null;
 
   // ── Header ──
   lines.push("# 🔥 FIRE Dashboard");
@@ -191,7 +235,8 @@ export function buildDashboardMarkdown(
 
   growthSummary = buildGrowthChartSummary(projection, settings, baseCurrency);
 
-  const chartBars = computeChartBars(projection, baseCurrency);
+  const totalDebt = debtData?.totalDebt ?? 0;
+  const chartBars = computeChartBars(projection, baseCurrency, totalDebt);
   const chartConfig: ChartConfig = {
     targetValue: projection.targetValue,
     targetLabel: formatCompactValue(projection.targetValue, baseCurrency),
@@ -242,6 +287,29 @@ export function buildDashboardMarkdown(
     }
   }
 
+  // ── Debt Projection Chart (SVG) ──
+  if (debtData && debtData.totalDebt > 0 && debtData.positions.length > 0) {
+    debtSummary = buildDebtChartSummary(debtData, baseCurrency);
+
+    const debtBars = computeDebtChartBars(debtData, projection, baseCurrency);
+    if (debtBars.length > 0) {
+      const debtConfig: DebtChartConfig = {
+        startingDebt: debtData.totalDebt,
+        startingDebtLabel: formatCompactValue(debtData.totalDebt, baseCurrency),
+        theme,
+        title: "Debt Repayment Projection",
+        tooltip: debtSummary,
+      };
+      const builtDebtSvg = buildDebtProjectionSVG(debtBars, debtConfig);
+      if (builtDebtSvg) {
+        debtSvg = builtDebtSvg;
+        const debtB64 = Buffer.from(builtDebtSvg).toString("base64");
+        lines.push(`![Debt Projection](data:image/svg+xml;base64,${debtB64})`);
+        lines.push("");
+      }
+    }
+  }
+
   // ── Footer ──
   lines.push("---");
   lines.push("");
@@ -262,8 +330,10 @@ export function buildDashboardMarkdown(
     markdown: lines.join("\n"),
     growthSvg,
     splitSvg,
+    debtSvg,
     growthSummary,
     splitSummary,
+    debtSummary,
   };
 }
 
@@ -418,11 +488,16 @@ export function buildSplitChartSummary(
  * Each bar also includes pre-formatted labels for inline display on the
  * bar segments.
  *
+ * When `totalDebt > 0`, each bar also carries the debt value as an overlay
+ * field. The debt value stays constant across all years (it represents the
+ * current snapshot — the Debt Projection SVG shows how it declines).
+ *
  * @param projection   - Full FIRE projection result
  * @param baseCurrency - Currency code for label formatting
+ * @param totalDebt    - Current cumulative debt (positive number, default 0)
  * @returns Array of ChartBar objects ready for the SVG builder
  */
-export function computeChartBars(projection: FireProjection, baseCurrency: string): ChartBar[] {
+export function computeChartBars(projection: FireProjection, baseCurrency: string, totalDebt: number = 0): ChartBar[] {
   const { years, currentPortfolioValue, realGrowthRate } = projection;
   if (years.length === 0) return [];
 
@@ -441,6 +516,12 @@ export function computeChartBars(projection: FireProjection, baseCurrency: strin
     const isFireYear = yearData.isTargetHit && !prevTargetHit;
     prevTargetHit = yearData.isTargetHit;
 
+    // Overlay debt on ALL bars — the debt is a constant snapshot showing
+    // how current debt compares to the projected portfolio at each year.
+    // As the portfolio grows the red frame shrinks proportionally.
+    const debtValue = totalDebt > 0 ? totalDebt : undefined;
+    const netEquity = debtValue !== undefined ? yearData.portfolioValue - debtValue : yearData.portfolioValue;
+
     return {
       year: yearData.year,
       label: formatCompactValue(yearData.portfolioValue, baseCurrency),
@@ -450,8 +531,205 @@ export function computeChartBars(projection: FireProjection, baseCurrency: strin
       isFireYear,
       baseLabel: formatCompactValue(baseGrowthValue, baseCurrency),
       contribLabel: contributionValue > 0 ? formatCompactValue(contributionValue, baseCurrency) : undefined,
+      debtValue,
+      debtLabel: debtValue !== undefined ? formatCompactValue(debtValue, baseCurrency) : undefined,
+      netLabel:
+        debtValue !== undefined && debtValue > yearData.portfolioValue
+          ? formatCompactValue(netEquity, baseCurrency)
+          : undefined,
     };
   });
+}
+
+// ──────────────────────────────────────────
+// Debt Chart Data Decomposition
+// ──────────────────────────────────────────
+
+/**
+ * Projects debt decline year-by-year using each position's APR
+ * and monthly repayment. Produces chart bars showing total remaining
+ * debt per year, split into **principal remaining** (left) and
+ * **interest in balance** (right).
+ *
+ * The projection runs monthly internally, tracking principal and
+ * interest components separately for each position. It emits one
+ * bar per year (12-month boundary), stopping after all debts are
+ * repaid or after a safety cap of 30 years.
+ *
+ * Principal vs Interest tracking:
+ *   Each month, interest accrues on the balance. The repayment first
+ *   covers the interest, then the remainder reduces principal. We
+ *   track `principalRemaining` and `interestInBalance` (unpaid
+ *   interest that rolled into the balance) per position. These
+ *   aggregate across all positions for each bar.
+ *
+ * @param debtData     - Current debt portfolio data
+ * @param projection   - FIRE projection (for year range alignment)
+ * @param baseCurrency - Currency code for label formatting
+ * @returns Array of DebtChartBar objects ready for the debt SVG builder
+ */
+export function computeDebtChartBars(
+  debtData: DebtPortfolioData,
+  projection: FireProjection,
+  baseCurrency: string,
+): DebtChartBar[] {
+  if (debtData.positions.length === 0 || debtData.totalDebt <= 0) return [];
+
+  const currentYear = new Date().getFullYear();
+  const maxYears = 30;
+  const maxMonths = maxYears * 12;
+
+  // Initialise per-position state with principal/interest tracking
+  const positionStates = debtData.positions.map((p) => ({
+    name: p.name,
+    principalRemaining: p.currentBalance,
+    interestInBalance: 0,
+    apr: p.apr,
+    monthlyRepayment: p.monthlyRepayment,
+  }));
+
+  const bars: DebtChartBar[] = [];
+  let cumulativeInterest = 0;
+  let prevDebtFreeHit = false;
+
+  // Helper: aggregate totals across all positions
+  const aggregate = () => {
+    let totalPrincipal = 0;
+    let totalInterest = 0;
+    for (const ps of positionStates) {
+      totalPrincipal += Math.max(0, ps.principalRemaining);
+      totalInterest += Math.max(0, ps.interestInBalance);
+    }
+    return { totalPrincipal, totalInterest, totalDebt: totalPrincipal + totalInterest };
+  };
+
+  // Emit the first bar (current state — all principal, no interest yet)
+  const initial = aggregate();
+
+  bars.push({
+    year: currentYear,
+    label: formatCompactValue(initial.totalDebt, baseCurrency),
+    totalDebt: initial.totalDebt,
+    principalRemaining: initial.totalPrincipal,
+    interestInBalance: initial.totalInterest,
+    principalLabel: formatCompactValue(initial.totalPrincipal, baseCurrency),
+    interestLabel: "",
+    cumulativeInterest: 0,
+    isDebtFreeYear: false,
+  });
+
+  // Project month by month, emit a bar at each 12-month boundary
+  for (let month = 1; month <= maxMonths; month++) {
+    // Apply monthly update to each position
+    for (const ps of positionStates) {
+      const totalBalance = ps.principalRemaining + ps.interestInBalance;
+      if (totalBalance <= 0.01) {
+        ps.principalRemaining = 0;
+        ps.interestInBalance = 0;
+        continue;
+      }
+
+      // 1. Accrue interest
+      const monthlyRate = ps.apr / 12 / 100;
+      const interest = totalBalance * monthlyRate;
+      cumulativeInterest += interest;
+      ps.interestInBalance += interest;
+
+      // 2. Apply repayment — covers interest first, then principal
+      const newTotal = ps.principalRemaining + ps.interestInBalance;
+      if (ps.monthlyRepayment >= newTotal) {
+        // Fully paid off
+        ps.principalRemaining = 0;
+        ps.interestInBalance = 0;
+      } else {
+        let repaymentLeft = ps.monthlyRepayment;
+
+        // Pay interest first
+        const interestPayment = Math.min(repaymentLeft, ps.interestInBalance);
+        ps.interestInBalance -= interestPayment;
+        repaymentLeft -= interestPayment;
+
+        // Remainder pays down principal
+        if (repaymentLeft > 0) {
+          ps.principalRemaining = Math.max(0, ps.principalRemaining - repaymentLeft);
+        }
+      }
+    }
+
+    // Emit a bar at each 12-month boundary (January of next year, etc.)
+    if (month % 12 === 0) {
+      const yearNum = currentYear + month / 12;
+      const agg = aggregate();
+
+      const isDebtFreeYear = agg.totalDebt <= 0.01 && !prevDebtFreeHit;
+      prevDebtFreeHit = prevDebtFreeHit || agg.totalDebt <= 0.01;
+
+      const effectiveDebt = agg.totalDebt <= 0.01 ? 0 : agg.totalDebt;
+      const effectivePrincipal = agg.totalDebt <= 0.01 ? 0 : agg.totalPrincipal;
+      const effectiveInterest = agg.totalDebt <= 0.01 ? 0 : agg.totalInterest;
+
+      bars.push({
+        year: yearNum,
+        label: formatCompactValue(effectiveDebt, baseCurrency),
+        totalDebt: effectiveDebt,
+        principalRemaining: effectivePrincipal,
+        interestInBalance: effectiveInterest,
+        principalLabel: effectivePrincipal > 0 ? formatCompactValue(effectivePrincipal, baseCurrency) : "",
+        interestLabel: effectiveInterest > 0 ? formatCompactValue(effectiveInterest, baseCurrency) : "",
+        cumulativeInterest,
+        isDebtFreeYear,
+      });
+
+      // Stop projecting 2 years after debt is fully paid
+      if (agg.totalDebt <= 0.01) {
+        if (bars.filter((b) => b.totalDebt <= 0.01).length >= 2) break;
+      }
+    }
+  }
+
+  return bars;
+}
+
+// ──────────────────────────────────────────
+// Debt Chart Summary
+// ──────────────────────────────────────────
+
+/**
+ * Builds a human-readable calculation summary for the debt projection chart.
+ *
+ * @param debtData     - Current debt portfolio data
+ * @param baseCurrency - Currency code for formatting
+ * @returns Multi-line summary string
+ */
+export function buildDebtChartSummary(debtData: DebtPortfolioData, baseCurrency: string): string {
+  const lines: string[] = [];
+
+  lines.push("Debt Repayment Projection");
+  lines.push("---------------------------------------");
+  lines.push(`Total Debt: ${formatCompactValue(debtData.totalDebt, baseCurrency)}`);
+  lines.push(`Number of Debts: ${debtData.positions.length}`);
+  lines.push("");
+
+  for (const pos of debtData.positions) {
+    const monthlyInterest = pos.currentBalance * (pos.apr / 12 / 100);
+    lines.push(
+      `${pos.name}: ${formatCompactValue(pos.currentBalance, baseCurrency)} ` +
+        `at ${pos.apr}% APR, ${formatCompactValue(pos.monthlyRepayment, baseCurrency)}/mo`,
+    );
+    if (pos.apr > 0) {
+      lines.push(`  Monthly interest: ~${formatCompactValue(monthlyInterest, baseCurrency)}`);
+    }
+  }
+
+  lines.push("");
+
+  // Estimate total months to payoff
+  const totalMonthlyRepayment = debtData.positions.reduce((sum, p) => sum + p.monthlyRepayment, 0);
+  if (totalMonthlyRepayment > 0) {
+    lines.push(`Combined monthly repayments: ${formatCompactValue(totalMonthlyRepayment, baseCurrency)}/mo`);
+  }
+
+  return lines.join("\n");
 }
 
 // ──────────────────────────────────────────

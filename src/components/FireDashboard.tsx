@@ -50,10 +50,23 @@ import {
   Toast,
   showHUD,
 } from "@raycast/api";
-import { Portfolio, PortfolioValuation, isLockedAccountType } from "../utils/types";
+import {
+  Portfolio,
+  PortfolioValuation,
+  isLockedAccountType,
+  isDebtAccountType,
+  isDebtAssetType,
+  isDebtArchived,
+  isDebtPaidOff,
+} from "../utils/types";
 import { FireSettings, FireContribution, FireProjection } from "../utils/fire-types";
 import { calculateProjection, totalAnnualContribution } from "../services/fire-calculator";
-import { buildDashboardMarkdown, SplitPortfolioData, DashboardMarkdownResult } from "../utils/fire-charts";
+import {
+  buildDashboardMarkdown,
+  SplitPortfolioData,
+  DebtPortfolioData,
+  DashboardMarkdownResult,
+} from "../utils/fire-charts";
 import { getDisplayName } from "../utils/formatting";
 import { formatCurrency } from "../utils/formatting";
 import { writeSvgToTempFile, saveSvgToDownloads } from "../utils/fire-chart-export";
@@ -206,13 +219,50 @@ export function FireDashboard({
 
   // ── Build markdown + raw SVGs ──
 
+  // ── Compute debt data for charts ──
+
+  const debtData: DebtPortfolioData | undefined = useMemo(() => {
+    if (!portfolio) return undefined;
+
+    const debtPositions = portfolio.accounts
+      .filter((a) => isDebtAccountType(a.type) && !settings.excludedAccountIds.includes(a.id))
+      .flatMap((a) =>
+        a.positions.filter(
+          (p) =>
+            isDebtAssetType(p.assetType) && p.debtData && !isDebtArchived(p.debtData) && !isDebtPaidOff(p.debtData),
+        ),
+      );
+
+    if (debtPositions.length === 0) return undefined;
+
+    const positions = debtPositions.map((p) => ({
+      name: p.customName ?? p.name,
+      currentBalance: p.debtData!.currentBalance,
+      apr: p.debtData!.apr,
+      monthlyRepayment: p.debtData!.monthlyRepayment,
+    }));
+
+    const totalDebt = positions.reduce((sum, dp) => sum + dp.currentBalance, 0);
+    if (totalDebt <= 0) return undefined;
+
+    return { totalDebt, positions };
+  }, [portfolio, settings.excludedAccountIds]);
+
   const theme = environment.appearance === "light" ? "light" : "dark";
 
   const dashboardData: DashboardMarkdownResult = useMemo(() => {
-    return buildDashboardMarkdown(projection, settings, baseCurrency, resolvedContributions, theme, splitData);
-  }, [projection, settings, baseCurrency, resolvedContributions, theme, splitData]);
+    return buildDashboardMarkdown(
+      projection,
+      settings,
+      baseCurrency,
+      resolvedContributions,
+      theme,
+      splitData,
+      debtData,
+    );
+  }, [projection, settings, baseCurrency, resolvedContributions, theme, splitData, debtData]);
 
-  const { markdown, growthSvg, splitSvg } = dashboardData;
+  const { markdown, growthSvg, splitSvg, debtSvg } = dashboardData;
 
   // ── Chart Action Handlers ──
 
@@ -435,7 +485,7 @@ export function FireDashboard({
           </ActionPanel.Section>
 
           {/* ── Chart Actions ── */}
-          {(growthSvg || splitSvg) && (
+          {(growthSvg || splitSvg || debtSvg) && (
             <ActionPanel.Section title="Charts">
               {growthSvg && (
                 <Action
@@ -453,6 +503,14 @@ export function FireDashboard({
                   onAction={() => handleOpenChart(splitSvg, "fire-split-projection.svg")}
                 />
               )}
+              {debtSvg && (
+                <Action
+                  title="Open Debt Chart"
+                  icon={Icon.Maximize}
+                  shortcut={{ modifiers: ["cmd", "opt"], key: "o" }}
+                  onAction={() => handleOpenChart(debtSvg, "fire-debt-projection.svg")}
+                />
+              )}
               {growthSvg && (
                 <Action
                   title="Save Growth Chart"
@@ -467,6 +525,14 @@ export function FireDashboard({
                   icon={Icon.Download}
                   shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
                   onAction={() => handleDownloadChart(splitSvg, "FIRE-Split-Projection.svg")}
+                />
+              )}
+              {debtSvg && (
+                <Action
+                  title="Save Debt Chart"
+                  icon={Icon.Download}
+                  shortcut={{ modifiers: ["cmd", "opt"], key: "s" }}
+                  onAction={() => handleDownloadChart(debtSvg, "FIRE-Debt-Projection.svg")}
                 />
               )}
             </ActionPanel.Section>
