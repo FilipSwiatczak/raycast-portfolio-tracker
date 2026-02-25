@@ -406,11 +406,19 @@ export function EditDebtForm({
       <Form.Checkbox
         id="paidOff"
         title="Status"
-        label="Mark as Paid Off ✅"
+        label="Mark as Paid Off ☑️"
         value={paidOff}
         onChange={setPaidOff}
-        info="When checked, this debt is marked as fully repaid. It will appear greyed out with a strikethrough in the portfolio."
+        info="When checked, this debt is marked as fully repaid. It will appear greyed out in the portfolio."
       />
+
+      {/* ── Paid Off Info (shown inline, right below status) ── */}
+      {paidOff && (
+        <Form.Description
+          title=""
+          text="🎉 This debt is marked as paid off! It will appear greyed out in the portfolio. You can archive it from the position actions."
+        />
+      )}
 
       <Form.Separator />
 
@@ -519,11 +527,7 @@ export function EditDebtForm({
       <Form.Separator />
       <Form.Description
         title=""
-        text={
-          paidOff
-            ? "🎉 This debt is marked as paid off! It will appear greyed out in the portfolio. You can archive it from the position actions."
-            : `Editing "${displayName}" in ${accountName}. Balance auto-updates on repayment day ${debtData.repaymentDayOfMonth} each month.`
-        }
+        text={`Editing "${displayName}" in ${accountName}. Balance auto-updates on repayment day ${debtData.repaymentDayOfMonth} each month.`}
       />
     </Form>
   );

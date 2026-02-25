@@ -283,14 +283,14 @@ function renderListMode({
 }: ListModeProps): React.JSX.Element {
   // ── Subtitle ──
   // Cash: "GBP · £500.00" (currency + formatted amount)
-  // Debt: "💳 Credit Card · £200/mo" or "~~Paid Off~~"
+  // Debt: "💳 Credit Card · £200/mo" or just the type label when paid off
   // Securities: "VUSA.L · 50 units" (symbol + unit count)
 
   const subtitle = isCash
     ? `${position.currency} · ${formatCurrency(position.units, position.currency)}`
     : isDebt && position.debtData
       ? isPaidOff
-        ? `~~Paid Off~~ · ${ASSET_TYPE_LABELS[position.assetType] ?? "Debt"}`
+        ? (ASSET_TYPE_LABELS[position.assetType] ?? "Debt")
         : `${formatCurrency(position.debtData.monthlyRepayment, position.currency)}/mo · ${position.debtData.apr}% APR`
       : isProperty
         ? `${position.mortgageData?.postcode ?? position.symbol} · ${position.assetType === AssetType.MORTGAGE ? "Mortgage" : "Owned"}`
@@ -310,7 +310,7 @@ function renderListMode({
     // Debt: show balance (positive for display) and paid-off / archived tags
     if (isPaidOff) {
       accessories.push({
-        tag: { value: "✅ Paid Off", color: Color.Green },
+        tag: { value: "☑️ Paid Off", color: Color.SecondaryText },
         tooltip: "This debt has been fully repaid",
       });
     } else {
@@ -383,7 +383,7 @@ function renderListMode({
 
   // Tooltip shows original name when the asset has been renamed
   // Build title with strikethrough for paid-off debts
-  const effectiveDisplayName = isPaidOff ? `~~${displayName}~~` : displayName;
+  const effectiveDisplayName = displayName;
   const titleTooltip = isPaidOff
     ? "This debt has been paid off"
     : isRenamed
@@ -487,7 +487,7 @@ function renderDetailMode({
     subtitle = `${position.currency} · ${formatCurrency(position.units, position.currency)}`;
   } else if (isDebt && position.debtData) {
     if (isPaidOff) {
-      subtitle = `~~Paid Off~~ · ${typeLabel}`;
+      subtitle = typeLabel;
     } else {
       const subtitleParts = [typeLabel];
       subtitleParts.push(`${formatCurrency(currentPrice, position.currency)} owed`);
@@ -559,7 +559,7 @@ function renderDetailMode({
       id={position.id}
       icon={icon}
       title={{
-        value: isPaidOff ? `~~${displayName}~~` : displayName,
+        value: displayName,
         tooltip: isPaidOff ? "This debt has been paid off" : isRenamed ? `Original name: ${position.name}` : undefined,
       }}
       subtitle={subtitle}
@@ -607,30 +607,26 @@ function buildDebtDetail({
 }): React.JSX.Element {
   const debtData = position.debtData!;
 
+  const displayName = getDisplayName(position);
+
   return (
     <List.Item.Detail
       metadata={
         <List.Item.Detail.Metadata>
-          {/* ── Status ── */}
-          {isPaidOff && (
-            <>
-              <List.Item.Detail.Metadata.TagList title="Status">
-                <List.Item.Detail.Metadata.TagList.Item text="✅ Paid Off" color={Color.Green} />
-              </List.Item.Detail.Metadata.TagList>
-              <List.Item.Detail.Metadata.Separator />
-            </>
-          )}
-          {isArchived && (
-            <>
-              <List.Item.Detail.Metadata.TagList title="Status">
-                <List.Item.Detail.Metadata.TagList.Item text="📦 Archived" color={Color.SecondaryText} />
-              </List.Item.Detail.Metadata.TagList>
-              <List.Item.Detail.Metadata.Separator />
-            </>
-          )}
+          {/* ── Name ── */}
+          <List.Item.Detail.Metadata.Label title="Name" text={displayName} />
+          <List.Item.Detail.Metadata.Separator />
 
           {/* ── Debt Info ── */}
           <List.Item.Detail.Metadata.Label title="Debt Type" text={typeLabel} />
+
+          {/* ── Status (combined into one row if both present) ── */}
+          {(isPaidOff || isArchived) && (
+            <List.Item.Detail.Metadata.TagList title="Status">
+              {isPaidOff && <List.Item.Detail.Metadata.TagList.Item text="☑️ Paid Off" color={Color.SecondaryText} />}
+              {isArchived && <List.Item.Detail.Metadata.TagList.Item text="📦 Archived" color={Color.SecondaryText} />}
+            </List.Item.Detail.Metadata.TagList>
+          )}
           <List.Item.Detail.Metadata.Label
             title="Outstanding Balance"
             text={formatCurrency(currentPrice, position.currency)}
