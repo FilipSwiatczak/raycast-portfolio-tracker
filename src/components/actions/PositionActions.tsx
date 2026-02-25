@@ -31,7 +31,7 @@
 
 import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
-import { Position } from "../../utils/types";
+import { Position, isDebtAssetType } from "../../utils/types";
 import { getDisplayName, hasCustomName, formatUnits } from "../../utils/formatting";
 
 // ──────────────────────────────────────────
@@ -47,6 +47,9 @@ interface PositionActionsProps {
 
   /** Whether this position is a property (MORTGAGE or OWNED_PROPERTY) */
   isProperty?: boolean;
+
+  /** Whether this position is a debt (CREDIT_CARD, LOAN, etc.) */
+  isDebt?: boolean;
 
   /**
    * Callback to navigate to the add-units form for this position.
@@ -76,6 +79,19 @@ interface PositionActionsProps {
   onShowCalculations?: () => void;
 
   /**
+   * Callback to edit a debt position.
+   * Pushes an EditDebtForm onto the navigation stack.
+   * Only used for debt positions.
+   */
+  onEditDebt?: () => void;
+
+  /**
+   * Callback to archive/unarchive a debt position.
+   * Toggles the archived state. Only used for paid-off debt positions.
+   */
+  onArchiveDebt?: () => void;
+
+  /**
    * Callback to delete this position from the account.
    * The component handles the confirmation dialog internally.
    */
@@ -101,10 +117,11 @@ interface PositionActionsProps {
  * displaying the position name and current units for clarity.
  *
  * Keyboard shortcuts:
- * - ⇧⌘U → Add Units (non-property only)
- * - ⌘E → Edit Asset
+ * - ⇧⌘U → Add Units (non-property, non-debt only)
+ * - ⌘E → Edit Asset / Edit Debt
  * - ⇧⌘V → Add Valuation (property only)
  * - ⌥⌘K → Show Calculations (property only)
+ * - ⌥⌘A → Archive Debt (paid-off debt only)
  * - ⌃X → Remove Position (with confirmation)
  * - ⌘C → Copy Symbol
  * - ⇧⌘C → Copy Name
@@ -114,10 +131,13 @@ export function PositionActions({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   accountId,
   isProperty = false,
+  isDebt = false,
   onAddUnits,
   onEditPosition,
   onAddValuation,
   onShowCalculations,
+  onEditDebt,
+  onArchiveDebt,
   onDeletePosition,
 }: PositionActionsProps): React.JSX.Element {
   const displayName = getDisplayName(position);
@@ -146,11 +166,36 @@ export function PositionActions({
     }
   }
 
+  const isDebtPosition = isDebt || isDebtAssetType(position.assetType);
+  const isPaidOff = isDebtPosition && position.debtData?.paidOff === true;
+  const isArchived = isDebtPosition && position.debtData?.archived === true;
+
   return (
     <>
       <ActionPanel.Section title={`${displayName} (${position.symbol})`}>
-        {/* Property: Edit Asset is the default action; non-property: Add Units is default */}
-        {isProperty ? (
+        {/* Debt: Edit Debt is the default action */}
+        {isDebtPosition ? (
+          <>
+            {onEditDebt && (
+              <Action
+                title="Edit Debt"
+                icon={Icon.Pencil}
+                shortcut={{ modifiers: ["cmd"], key: "e" }}
+                onAction={onEditDebt}
+              />
+            )}
+
+            {isPaidOff && onArchiveDebt && (
+              <Action
+                title={isArchived ? "Unarchive Debt" : "Archive Debt"}
+                icon={isArchived ? Icon.Eye : Icon.Tray}
+                shortcut={{ modifiers: ["cmd", "opt"], key: "a" }}
+                onAction={onArchiveDebt}
+              />
+            )}
+          </>
+        ) : isProperty ? (
+          /* Property: Edit Asset is the default action */
           <>
             <Action
               title="Edit Asset"
@@ -178,6 +223,7 @@ export function PositionActions({
             )}
           </>
         ) : (
+          /* Regular positions: Add Units is default */
           <>
             <Action
               title="Add Units"

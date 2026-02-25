@@ -24,6 +24,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.CURRENT_ACCOUNT]: "Current Account",
   [AccountType.SAVINGS_ACCOUNT]: "Savings Account",
   [AccountType.PROPERTY]: "🏡 Property",
+  [AccountType.DEBT]: "💰🔻 Debt",
   [AccountType.OTHER]: "Other",
 };
 
@@ -42,6 +43,7 @@ export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
   [AccountType.CURRENT_ACCOUNT]: Color.Yellow,
   [AccountType.SAVINGS_ACCOUNT]: Color.Green,
   [AccountType.PROPERTY]: Color.Orange,
+  [AccountType.DEBT]: Color.Red,
   [AccountType.OTHER]: Color.SecondaryText,
 };
 
@@ -62,6 +64,11 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   [AssetType.CASH]: "Cash",
   [AssetType.MORTGAGE]: "Mortgage Property",
   [AssetType.OWNED_PROPERTY]: "Owned Outright",
+  [AssetType.CREDIT_CARD]: "💳 Credit Card",
+  [AssetType.LOAN]: "🏦 Loan",
+  [AssetType.STUDENT_LOAN]: "📚💰 Student Loan",
+  [AssetType.AUTO_LOAN]: "🚗 Auto Loan",
+  [AssetType.BNPL]: "💳 Buy Now Pay Later",
   [AssetType.UNKNOWN]: "Unknown",
 };
 
@@ -140,6 +147,8 @@ export const CACHE_PREFIX = {
   HPI: "hpi",
   /** Postcode-to-region mapping cache: `postcode-region:{postcode}` (stable, no date) */
   POSTCODE_REGION: "postcode-region",
+  /** Debt repayment log: `debt-repayments` (persisted, no date) */
+  DEBT_REPAYMENTS: "debt-repayments",
 } as const;
 
 /** Cache capacity in bytes (5 MB — well within Raycast's 10 MB default) */
@@ -153,6 +162,8 @@ export const CACHE_CAPACITY_BYTES = 5 * 1024 * 1024;
 export const STORAGE_KEYS = {
   /** The full serialised Portfolio object */
   PORTFOLIO: "portfolio-data",
+  /** Debt repayment log — tracks auto-applied monthly repayments */
+  DEBT_REPAYMENTS: "debt-repayments",
 } as const;
 
 // ──────────────────────────────────────────

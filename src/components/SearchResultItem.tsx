@@ -63,6 +63,11 @@ const ASSET_TYPE_COLORS: Record<AssetType, Color.ColorLike> = {
   [AssetType.CASH]: Color.Green,
   [AssetType.MORTGAGE]: Color.Orange,
   [AssetType.OWNED_PROPERTY]: Color.Orange,
+  [AssetType.CREDIT_CARD]: Color.Red,
+  [AssetType.LOAN]: Color.Red,
+  [AssetType.STUDENT_LOAN]: Color.Red,
+  [AssetType.AUTO_LOAN]: Color.Red,
+  [AssetType.BNPL]: Color.Red,
   [AssetType.UNKNOWN]: Color.SecondaryText,
 };
 
@@ -81,6 +86,11 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.CASH]: Icon.BankNote,
   [AssetType.MORTGAGE]: Icon.House,
   [AssetType.OWNED_PROPERTY]: Icon.House,
+  [AssetType.CREDIT_CARD]: Icon.CreditCard,
+  [AssetType.LOAN]: Icon.BankNote,
+  [AssetType.STUDENT_LOAN]: Icon.Book,
+  [AssetType.AUTO_LOAN]: Icon.Car,
+  [AssetType.BNPL]: Icon.CreditCard,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 

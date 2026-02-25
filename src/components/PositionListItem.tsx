@@ -45,7 +45,7 @@
 
 import React from "react";
 import { Color, Icon, List } from "@raycast/api";
-import { PositionValuation, AssetType, isPropertyAssetType } from "../utils/types";
+import { PositionValuation, AssetType, isPropertyAssetType, isDebtAssetType, isDebtPaidOff } from "../utils/types";
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -98,6 +98,11 @@ const ASSET_TYPE_ICONS: Record<AssetType, Icon> = {
   [AssetType.CASH]: Icon.BankNote,
   [AssetType.MORTGAGE]: Icon.House,
   [AssetType.OWNED_PROPERTY]: Icon.House,
+  [AssetType.CREDIT_CARD]: Icon.CreditCard,
+  [AssetType.LOAN]: Icon.BankNote,
+  [AssetType.STUDENT_LOAN]: Icon.Book,
+  [AssetType.AUTO_LOAN]: Icon.Car,
+  [AssetType.BNPL]: Icon.CreditCard,
   [AssetType.UNKNOWN]: Icon.QuestionMarkCircle,
 };
 
@@ -121,6 +126,9 @@ export function PositionListItem({
   const typeLabel = ASSET_TYPE_LABELS[position.assetType] ?? "Unknown";
   const isCash = position.assetType === AssetType.CASH;
   const isProperty = isPropertyAssetType(position.assetType);
+  const isDebt = isDebtAssetType(position.assetType);
+  const isPaidOff = isDebt && position.debtData ? isDebtPaidOff(position.debtData) : false;
+  const isArchived = isDebt && position.debtData?.archived === true;
   const displayName = getDisplayName(position);
   const isRenamed = hasCustomName(position);
 
@@ -154,6 +162,7 @@ export function PositionListItem({
     displayName,
     "cash",
     ...(isProperty ? ["property", "mortgage", "house", position.mortgageData?.postcode ?? ""] : []),
+    ...(isDebt ? ["debt", "loan", "credit", "repayment"] : []),
   ];
 
   // ── Mode-Specific Rendering ──
@@ -165,6 +174,9 @@ export function PositionListItem({
       typeLabel,
       isCash,
       isProperty,
+      isDebt,
+      isPaidOff,
+      isArchived,
       hasPrice,
       currentPrice,
       totalNativeValue,
@@ -188,6 +200,9 @@ export function PositionListItem({
     icon,
     isCash,
     isProperty,
+    isDebt,
+    isPaidOff,
+    isArchived,
     hasPrice,
     currentPrice,
     totalBaseValue,
@@ -211,6 +226,9 @@ interface ListModeProps {
   icon: Icon;
   isCash: boolean;
   isProperty: boolean;
+  isDebt: boolean;
+  isPaidOff: boolean;
+  isArchived: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalBaseValue: number;
@@ -248,6 +266,9 @@ function renderListMode({
   icon,
   isCash,
   isProperty,
+  isDebt,
+  isPaidOff,
+  isArchived,
   hasPrice,
   currentPrice,
   totalBaseValue,
@@ -262,13 +283,18 @@ function renderListMode({
 }: ListModeProps): React.JSX.Element {
   // ── Subtitle ──
   // Cash: "GBP · £500.00" (currency + formatted amount)
+  // Debt: "💳 Credit Card · £200/mo" or "~~Paid Off~~"
   // Securities: "VUSA.L · 50 units" (symbol + unit count)
 
   const subtitle = isCash
     ? `${position.currency} · ${formatCurrency(position.units, position.currency)}`
-    : isProperty
-      ? `${position.mortgageData?.postcode ?? position.symbol} · ${position.assetType === AssetType.MORTGAGE ? "Mortgage" : "Owned"}`
-      : `${position.symbol} · ${formatUnits(position.units)} units`;
+    : isDebt && position.debtData
+      ? isPaidOff
+        ? `~~Paid Off~~ · ${ASSET_TYPE_LABELS[position.assetType] ?? "Debt"}`
+        : `${formatCurrency(position.debtData.monthlyRepayment, position.currency)}/mo · ${position.debtData.apr}% APR`
+      : isProperty
+        ? `${position.mortgageData?.postcode ?? position.symbol} · ${position.assetType === AssetType.MORTGAGE ? "Mortgage" : "Owned"}`
+        : `${position.symbol} · ${formatUnits(position.units)} units`;
 
   // ── Accessories ──
 
@@ -280,6 +306,39 @@ function renderListMode({
       text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: Color.PrimaryText },
       tooltip: `Cash balance: ${formatCurrency(totalBaseValue, baseCurrency)}`,
     });
+  } else if (isDebt && position.debtData) {
+    // Debt: show balance (positive for display) and paid-off / archived tags
+    if (isPaidOff) {
+      accessories.push({
+        tag: { value: "✅ Paid Off", color: Color.Green },
+        tooltip: "This debt has been fully repaid",
+      });
+    } else {
+      // Show the outstanding balance as a red value
+      accessories.push({
+        text: {
+          value: formatCurrencyCompact(currentPrice, position.currency),
+          color: Color.Red,
+        },
+        tooltip: `Outstanding balance: ${formatCurrency(currentPrice, position.currency)}`,
+      });
+    }
+    if (isArchived) {
+      accessories.push({
+        tag: { value: "📦 Archived", color: Color.SecondaryText },
+        tooltip: "This debt is archived and excluded from totals",
+      });
+    }
+    // Debt total in base currency (negative, shown with minus sign)
+    if (!isPaidOff && !isArchived) {
+      accessories.push({
+        text: {
+          value: formatCurrencyCompact(totalBaseValue, baseCurrency),
+          color: Color.Red,
+        },
+        tooltip: `Debt value: ${formatCurrency(totalBaseValue, baseCurrency)} (subtracted from portfolio)`,
+      });
+    }
   } else if (hasPrice) {
     // Price / equity in native currency
     accessories.push({
@@ -323,13 +382,19 @@ function renderListMode({
   }
 
   // Tooltip shows original name when the asset has been renamed
-  const titleTooltip = isRenamed ? `Original name: ${position.name}` : undefined;
+  // Build title with strikethrough for paid-off debts
+  const effectiveDisplayName = isPaidOff ? `~~${displayName}~~` : displayName;
+  const titleTooltip = isPaidOff
+    ? "This debt has been paid off"
+    : isRenamed
+      ? `Original name: ${position.name}`
+      : undefined;
 
   return (
     <List.Item
       id={position.id}
       icon={icon}
-      title={{ value: displayName, tooltip: titleTooltip }}
+      title={{ value: effectiveDisplayName, tooltip: titleTooltip }}
       subtitle={subtitle}
       accessories={accessories}
       keywords={keywords}
@@ -339,7 +404,7 @@ function renderListMode({
 }
 
 // ──────────────────────────────────────────
-// Detail Mode — Split-Pane (with detail panel)
+// Detail Mode — Split-Pane Layout (with detail panel)
 // ──────────────────────────────────────────
 
 interface DetailModeProps {
@@ -348,6 +413,9 @@ interface DetailModeProps {
   typeLabel: string;
   isCash: boolean;
   isProperty: boolean;
+  isDebt: boolean;
+  isPaidOff: boolean;
+  isArchived: boolean;
   hasPrice: boolean;
   currentPrice: number;
   totalNativeValue: number;
@@ -390,6 +458,9 @@ function renderDetailMode({
   typeLabel,
   isCash,
   isProperty,
+  isDebt,
+  isPaidOff,
+  isArchived,
   hasPrice,
   currentPrice,
   totalNativeValue,
@@ -414,6 +485,15 @@ function renderDetailMode({
 
   if (isCash) {
     subtitle = `${position.currency} · ${formatCurrency(position.units, position.currency)}`;
+  } else if (isDebt && position.debtData) {
+    if (isPaidOff) {
+      subtitle = `~~Paid Off~~ · ${typeLabel}`;
+    } else {
+      const subtitleParts = [typeLabel];
+      subtitleParts.push(`${formatCurrency(currentPrice, position.currency)} owed`);
+      subtitleParts.push(`${position.debtData.apr}% APR`);
+      subtitle = subtitleParts.join(" · ");
+    }
   } else if (isProperty) {
     const subtitleParts = [position.mortgageData?.postcode ?? position.symbol];
     subtitleParts.push(formatPercent(changePercent));
@@ -433,40 +513,55 @@ function renderDetailMode({
 
   const detail = isCash
     ? buildCashDetail({ position, typeLabel, totalNativeValue, totalBaseValue, fxRate, isCrossCurrency, baseCurrency })
-    : isProperty
-      ? buildPropertyDetail({
+    : isDebt && position.debtData
+      ? buildDebtDetail({
           position,
           typeLabel,
-          totalBaseValue,
-          fxRate,
-          isCrossCurrency,
-          baseCurrency,
-          displayName,
-          isRenamed,
-          hpiChangePercent,
-        })
-      : buildSecuritiesDetail({
-          position,
-          typeLabel,
-          hasPrice,
           currentPrice,
-          totalNativeValue,
           totalBaseValue,
-          change,
-          changePercent,
-          changeColor,
           fxRate,
           isCrossCurrency,
           baseCurrency,
-          displayName,
-          isRenamed,
-        });
+          isPaidOff,
+          isArchived,
+        })
+      : isProperty
+        ? buildPropertyDetail({
+            position,
+            typeLabel,
+            totalBaseValue,
+            fxRate,
+            isCrossCurrency,
+            baseCurrency,
+            displayName,
+            isRenamed,
+            hpiChangePercent,
+          })
+        : buildSecuritiesDetail({
+            position,
+            typeLabel,
+            hasPrice,
+            currentPrice,
+            totalNativeValue,
+            totalBaseValue,
+            change,
+            changePercent,
+            changeColor,
+            fxRate,
+            isCrossCurrency,
+            baseCurrency,
+            displayName,
+            isRenamed,
+          });
 
   return (
     <List.Item
       id={position.id}
       icon={icon}
-      title={{ value: displayName, tooltip: isRenamed ? `Original name: ${position.name}` : undefined }}
+      title={{
+        value: isPaidOff ? `~~${displayName}~~` : displayName,
+        tooltip: isPaidOff ? "This debt has been paid off" : isRenamed ? `Original name: ${position.name}` : undefined,
+      }}
       subtitle={subtitle}
       keywords={keywords}
       detail={detail}
@@ -485,6 +580,118 @@ function renderDetailMode({
  * Shows: type tag, currency, balance, converted value (if cross-currency),
  * FX rate (if cross-currency), and date added.
  */
+// ──────────────────────────────────────────
+// Debt Detail Panel Builder
+// ──────────────────────────────────────────
+
+function buildDebtDetail({
+  position,
+  typeLabel,
+  currentPrice,
+  totalBaseValue,
+  fxRate,
+  isCrossCurrency,
+  baseCurrency,
+  isPaidOff,
+  isArchived,
+}: {
+  position: PositionValuation["position"];
+  typeLabel: string;
+  currentPrice: number;
+  totalBaseValue: number;
+  fxRate: number;
+  isCrossCurrency: boolean;
+  baseCurrency: string;
+  isPaidOff: boolean;
+  isArchived: boolean;
+}): React.JSX.Element {
+  const debtData = position.debtData!;
+
+  return (
+    <List.Item.Detail
+      metadata={
+        <List.Item.Detail.Metadata>
+          {/* ── Status ── */}
+          {isPaidOff && (
+            <>
+              <List.Item.Detail.Metadata.TagList title="Status">
+                <List.Item.Detail.Metadata.TagList.Item text="✅ Paid Off" color={Color.Green} />
+              </List.Item.Detail.Metadata.TagList>
+              <List.Item.Detail.Metadata.Separator />
+            </>
+          )}
+          {isArchived && (
+            <>
+              <List.Item.Detail.Metadata.TagList title="Status">
+                <List.Item.Detail.Metadata.TagList.Item text="📦 Archived" color={Color.SecondaryText} />
+              </List.Item.Detail.Metadata.TagList>
+              <List.Item.Detail.Metadata.Separator />
+            </>
+          )}
+
+          {/* ── Debt Info ── */}
+          <List.Item.Detail.Metadata.Label title="Debt Type" text={typeLabel} />
+          <List.Item.Detail.Metadata.Label
+            title="Outstanding Balance"
+            text={formatCurrency(currentPrice, position.currency)}
+          />
+          <List.Item.Detail.Metadata.Label title="APR" text={`${debtData.apr}%`} />
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Repayment Info ── */}
+          <List.Item.Detail.Metadata.Label
+            title="Monthly Repayment"
+            text={formatCurrency(debtData.monthlyRepayment, position.currency)}
+          />
+          <List.Item.Detail.Metadata.Label
+            title="Repayment Day"
+            text={`${debtData.repaymentDayOfMonth}th of each month`}
+          />
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Loan Progress (if applicable) ── */}
+          {debtData.loanStartDate && debtData.loanEndDate && (
+            <>
+              <List.Item.Detail.Metadata.Label title="Loan Start" text={formatDate(debtData.loanStartDate)} />
+              <List.Item.Detail.Metadata.Label title="Loan End" text={formatDate(debtData.loanEndDate)} />
+              {debtData.totalTermMonths && (
+                <List.Item.Detail.Metadata.Label title="Total Term" text={`${debtData.totalTermMonths} months`} />
+              )}
+              <List.Item.Detail.Metadata.Separator />
+            </>
+          )}
+
+          {/* ── Value in Portfolio ── */}
+          <List.Item.Detail.Metadata.Label
+            title="Portfolio Impact"
+            text={formatCurrency(totalBaseValue, baseCurrency)}
+          />
+
+          {isCrossCurrency && (
+            <List.Item.Detail.Metadata.Label
+              title="FX Rate"
+              text={`1 ${position.currency} = ${fxRate.toFixed(4)} ${baseCurrency}`}
+            />
+          )}
+
+          <List.Item.Detail.Metadata.Separator />
+
+          {/* ── Original Balance ── */}
+          <List.Item.Detail.Metadata.Label
+            title="Original Balance"
+            text={formatCurrency(debtData.currentBalance, position.currency)}
+          />
+          <List.Item.Detail.Metadata.Label title="Entered" text={formatDate(debtData.enteredAt)} />
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+// ──────────────────────────────────────────
+// Cash Detail Panel Builder
+// ──────────────────────────────────────────
+
 function buildCashDetail({
   position,
   typeLabel,

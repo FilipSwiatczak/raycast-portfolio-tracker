@@ -41,6 +41,7 @@ import {
   AccountType,
   AssetType,
   MortgageData,
+  DebtData,
   isPropertyAssetType,
 } from "../utils/types";
 import { loadPortfolio, savePortfolio } from "../utils/storage";
@@ -83,6 +84,7 @@ export interface UsePortfolioReturn {
       units: number;
       currency: string;
       assetType: AssetType;
+      debtData?: DebtData;
     },
   ) => Promise<Position>;
 
@@ -103,6 +105,28 @@ export interface UsePortfolioReturn {
       mortgageData?: MortgageData;
     },
   ) => Promise<void>;
+
+  /**
+   * Updates a debt position's debt data, asset type, and/or name.
+   * Used by EditDebtForm to persist changes to debt positions.
+   */
+  updateDebtPosition: (
+    accountId: string,
+    positionId: string,
+    updates: {
+      name?: string;
+      customName?: string;
+      assetType?: AssetType;
+      debtData?: DebtData;
+    },
+  ) => Promise<void>;
+
+  /**
+   * Toggles the archived state of a debt position.
+   * Archived positions are hidden from the default portfolio view
+   * and excluded from totals.
+   */
+  archiveDebtPosition: (accountId: string, positionId: string) => Promise<void>;
 
   /** Sets a custom display name for a position (rename) */
   renamePosition: (accountId: string, positionId: string, customName: string) => Promise<void>;
@@ -301,6 +325,7 @@ export function usePortfolio(): UsePortfolioReturn {
         assetType: AssetType;
         priceOverride?: number;
         mortgageData?: MortgageData;
+        debtData?: DebtData;
       },
     ): Promise<Position> => {
       const newPosition: Position = {
@@ -312,6 +337,7 @@ export function usePortfolio(): UsePortfolioReturn {
         assetType: params.assetType,
         priceOverride: params.priceOverride,
         ...(params.mortgageData && { mortgageData: params.mortgageData }),
+        ...(params.debtData && { debtData: params.debtData }),
         addedAt: new Date().toISOString(),
       };
 
@@ -458,6 +484,120 @@ export function usePortfolio(): UsePortfolioReturn {
       await showToast({
         style: Toast.Style.Success,
         title: "Property Updated",
+        message: posName,
+      });
+    },
+    [mutate],
+  );
+
+  const updateDebtPosition = useCallback(
+    async (
+      accountId: string,
+      positionId: string,
+      updates: {
+        name?: string;
+        customName?: string;
+        assetType?: AssetType;
+        debtData?: DebtData;
+      },
+    ): Promise<void> => {
+      const applyUpdates = (pos: Position): Position => {
+        if (pos.id !== positionId) return pos;
+        return {
+          ...pos,
+          ...(updates.name !== undefined && { name: updates.name }),
+          ...(updates.customName !== undefined ? { customName: updates.customName } : {}),
+          ...(updates.assetType !== undefined && { assetType: updates.assetType }),
+          ...(updates.debtData !== undefined && { debtData: updates.debtData }),
+        };
+      };
+
+      await mutate(
+        (async () => {
+          const current = await loadPortfolio();
+          const updated: Portfolio = {
+            ...current,
+            accounts: current.accounts.map((account) =>
+              account.id === accountId ? { ...account, positions: account.positions.map(applyUpdates) } : account,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: currentData.accounts.map((account) =>
+                account.id === accountId ? { ...account, positions: account.positions.map(applyUpdates) } : account,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+
+      const posName = updates.customName ?? updates.name ?? "Debt";
+      await showToast({
+        style: Toast.Style.Success,
+        title: "Debt Updated",
+        message: posName,
+      });
+    },
+    [mutate],
+  );
+
+  const archiveDebtPosition = useCallback(
+    async (accountId: string, positionId: string): Promise<void> => {
+      const applyArchive = (pos: Position): Position => {
+        if (pos.id !== positionId || !pos.debtData) return pos;
+        return {
+          ...pos,
+          debtData: {
+            ...pos.debtData,
+            archived: !pos.debtData.archived,
+          },
+        };
+      };
+
+      await mutate(
+        (async () => {
+          const current = await loadPortfolio();
+          const updated: Portfolio = {
+            ...current,
+            accounts: current.accounts.map((account) =>
+              account.id === accountId ? { ...account, positions: account.positions.map(applyArchive) } : account,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+          await savePortfolio(updated);
+          return updated;
+        })(),
+        {
+          optimisticUpdate(currentData) {
+            if (!currentData) return currentData;
+            return {
+              ...currentData,
+              accounts: currentData.accounts.map((account) =>
+                account.id === accountId ? { ...account, positions: account.positions.map(applyArchive) } : account,
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          },
+        },
+      );
+
+      // Determine the new state to show the right toast
+      const fresh = await loadPortfolio();
+      const pos = fresh.accounts.find((a) => a.id === accountId)?.positions.find((p) => p.id === positionId);
+      const isNowArchived = pos?.debtData?.archived ?? false;
+      const posName = pos ? getDisplayName(pos) : "Debt";
+
+      await showToast({
+        style: Toast.Style.Success,
+        title: isNowArchived ? "Debt Archived" : "Debt Unarchived",
         message: posName,
       });
     },
@@ -760,21 +900,19 @@ export function usePortfolio(): UsePortfolioReturn {
     portfolio,
     isLoading,
     revalidate,
-
     addAccount,
     updateAccount,
     removeAccount,
-
     addPosition,
     updatePosition,
     updatePropertyPosition,
+    updateDebtPosition,
+    archiveDebtPosition,
     renamePosition,
     restorePositionName,
     batchRenamePositions,
     removePosition,
-
     mergeAccounts,
-
     getAllPositions,
     getAllSymbols,
     getAllCurrencies,

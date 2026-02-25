@@ -38,7 +38,18 @@
    - "Show Calculations" action (⌥⌘K) — full step-by-step markdown breakdown with formula, numbers, emojis, and colours ✅
    - Validated against real-life mortgage with bank-confirmed figures (£470k property, 60% SO, -5.1% HPI) ✅
    - 65 new unit tests including real-life example validation (497 total) ✅
-7. Add Debt handling as an asset class. On addition ask for Total Value, Current Debt, date of valuation. Create a service to fetch the price percentage change since valuation date based on a relevant debt index (e.g. average mortgage rates). The calculation is similar to property but the change is negative and it reduces the total portfolio value instead of increasing it.
+7. Add Debt handling as an asset class. ✅
+   - Account type: 💰🔻 Debt with five position types: 💳 Credit Card, 🏦 Loan, 📚💰 Student Loan, 🚗 Auto Loan, 💳 BNPL
+   - Data model: `DebtData` interface with balance, APR, monthly repayment, repayment day of month, loan start/end dates
+   - Debt calculator service (`services/debt-calculator.ts`): standard amortisation formula, monthly balance updates (interest + repayment), repayment schedule projection, loan progress tracking
+   - Debt repayment tracking service (`services/debt-repayments.ts`): auto-applies repayments on repayment day via LocalStorage log, idempotent sync, batch processing
+   - Portfolio integration: debt values **subtracted** from portfolio total (net worth), debt positions skip Yahoo Finance API (local calculation only)
+   - AddDebtForm / EditDebtForm: adaptive fields by debt type, auto-calculated amortised payment from loan dates, currency override
+   - Paid-off state: greyed-out strikethrough display, "Mark as Paid Off" toggle in edit form
+   - Archive system: paid-off debts can be archived (hidden + excluded from totals), "Toggle Archived" action shows/hides archived debt
+   - Detail panel: outstanding balance, APR, monthly repayment, repayment day, loan progress, portfolio impact, original balance
+   - FIRE integration: debt positions selectable as contribution targets (repayment = contribution)
+   - 66 new unit tests for debt calculator (563 total) covering amortisation, monthly updates, repayment counting, loan progress, edge cases, and real-world scenarios (credit card, BNPL, student loan, auto loan)
 8. Add Import/Export functionality. Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, and last updated date. Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column. 🔧
 9. Fix Portfolio Tracker "Day Change" showing as "+0.01%" where it should be "+1%" it's display 0.0X and then not mutplying by 100
 10. Fee Tracking: Add entry for fees on Account level and on each Position level. This is a new option in the Portfolio Tracker when editing and adding accounts and positions. Check the Yahoo API response it it includes asset type for Position (only ETFs attract annual fees). It's % based, anually. FIRE setting then have an option to "Adjust growth for Account Fees" and "Adjust growth for ETF Fees" which are ON by default. When ON, FIRE SVG chart calculations subtract a sum of (account fee + position fee) from the growth rate (negative possible). Then a new SVG Chart ("Fee Tracking") is present showing the total sum of all fees (bar stacked with two values: account fees and ETF fees) shown over time, with same format at the other SVGs.

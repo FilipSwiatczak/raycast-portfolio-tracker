@@ -47,6 +47,7 @@ export enum AccountType {
   CURRENT_ACCOUNT = "CURRENT ACCOUNT",
   SAVINGS_ACCOUNT = "SAVINGS ACCOUNT",
   PROPERTY = "PROPERTY",
+  DEBT = "DEBT",
   OTHER = "OTHER",
 }
 
@@ -72,6 +73,16 @@ export function isPropertyAccountType(type: AccountType): boolean {
   return type === AccountType.PROPERTY;
 }
 
+/**
+ * Returns true if the account type is a debt account.
+ * Debt accounts hold CREDIT_CARD, LOAN, STUDENT_LOAN, AUTO_LOAN,
+ * or BNPL positions. Debt values are subtracted from the portfolio
+ * total to produce a net worth figure.
+ */
+export function isDebtAccountType(type: AccountType): boolean {
+  return type === AccountType.DEBT;
+}
+
 /** Asset type as returned by Yahoo Finance (plus CASH, MORTGAGE, OWNED_PROPERTY for non-traded holdings) */
 export enum AssetType {
   EQUITY = "EQUITY",
@@ -88,6 +99,16 @@ export enum AssetType {
   MORTGAGE = "MORTGAGE",
   /** Property owned outright (no mortgage). Value = total property value adjusted for HPI appreciation. */
   OWNED_PROPERTY = "OWNED_PROPERTY",
+  /** Credit card debt. Balance reduces by monthly repayment, increases by APR interest. */
+  CREDIT_CARD = "CREDIT_CARD",
+  /** General loan (personal, medical, etc.). Amortised repayment schedule. */
+  LOAN = "LOAN",
+  /** Student loan. Amortised repayment schedule with loan-specific terms. */
+  STUDENT_LOAN = "STUDENT_LOAN",
+  /** Auto / vehicle loan. Amortised repayment schedule. */
+  AUTO_LOAN = "AUTO_LOAN",
+  /** Buy Now Pay Later. Typically 0% APR, fixed-term instalment plan. */
+  BNPL = "BNPL",
   UNKNOWN = "UNKNOWN",
 }
 
@@ -100,6 +121,29 @@ export function isPropertyAssetType(type: AssetType): boolean {
   return type === AssetType.MORTGAGE || type === AssetType.OWNED_PROPERTY;
 }
 
+/**
+ * Returns true if the asset type represents a debt position.
+ * Debt positions have their value subtracted from the portfolio total
+ * and use local amortisation/repayment calculations rather than market quotes.
+ */
+export function isDebtAssetType(type: AssetType): boolean {
+  return (
+    type === AssetType.CREDIT_CARD ||
+    type === AssetType.LOAN ||
+    type === AssetType.STUDENT_LOAN ||
+    type === AssetType.AUTO_LOAN ||
+    type === AssetType.BNPL
+  );
+}
+
+/**
+ * Returns true if the asset type is a loan-like debt (has amortisation schedule).
+ * Credit cards and BNPL are excluded — they use simpler balance tracking.
+ */
+export function isAmortisedDebtType(type: AssetType): boolean {
+  return type === AssetType.LOAN || type === AssetType.STUDENT_LOAN || type === AssetType.AUTO_LOAN;
+}
+
 /** Classifies errors for display and retry logic */
 export enum ErrorType {
   /** Network offline, timeout, 502/503/504 — retryable */
@@ -108,6 +152,103 @@ export enum ErrorType {
   API_ERROR = "API_ERROR",
   /** Unexpected / unknown errors */
   UNKNOWN = "UNKNOWN",
+}
+
+// ──────────────────────────────────────────
+// Debt Data
+// ──────────────────────────────────────────
+
+/**
+ * Additional data stored on debt positions (CREDIT_CARD, LOAN, STUDENT_LOAN, AUTO_LOAN, BNPL).
+ *
+ * For amortised loan types (LOAN, STUDENT_LOAN, AUTO_LOAN), either `monthlyRepayment`
+ * is provided directly, OR `loanStartDate` + `loanEndDate` are provided and the
+ * monthly repayment is calculated using a standard amortisation formula.
+ *
+ * For CREDIT_CARD and BNPL, `monthlyRepayment` is always provided directly.
+ *
+ * Interest is applied using the simple monthly model:
+ *   newBalance = oldBalance - monthlyRepayment + (oldBalance × APR / 12 / 100)
+ */
+export interface DebtData {
+  /** Outstanding balance at time of entry or last update, in the position's currency */
+  currentBalance: number;
+
+  /** Annual Percentage Rate as a percentage (e.g. 19.9 means 19.9%). 0 for interest-free. */
+  apr: number;
+
+  /** Day of month when repayment is made (1–31). Used for auto-tracking repayments. */
+  repaymentDayOfMonth: number;
+
+  /** Monthly repayment amount in the position's currency */
+  monthlyRepayment: number;
+
+  /** ISO 8601 date string when this debt was entered into the tracker */
+  enteredAt: string;
+
+  // ── Loan-specific (optional) ──
+
+  /**
+   * ISO 8601 date string when the loan started (e.g. "2022-01-15").
+   * When provided with `loanEndDate`, enables progress tracking and
+   * amortisation-based monthly repayment calculation.
+   */
+  loanStartDate?: string;
+
+  /**
+   * ISO 8601 date string when the loan ends (e.g. "2027-01-15").
+   * When provided with `loanStartDate`, enables progress tracking.
+   */
+  loanEndDate?: string;
+
+  /**
+   * Total loan term in months. Derived from loanStartDate + loanEndDate
+   * when both are provided, or set directly by the user.
+   */
+  totalTermMonths?: number;
+
+  // ── Paid-off / Archive state ──
+
+  /**
+   * Whether this debt has been fully paid off.
+   * When true, the position is greyed out with strikethrough styling
+   * and an "Archive Debt" action becomes available.
+   */
+  paidOff?: boolean;
+
+  /**
+   * Whether this debt has been archived (hidden from default view).
+   * Archived debts are excluded from portfolio totals and hidden
+   * unless the "Toggle Archived" action is active.
+   */
+  archived?: boolean;
+}
+
+/**
+ * Returns true if the debt data has both loan start and end dates,
+ * enabling progress tracking and amortisation calculations.
+ */
+export function hasLoanTermData(data: DebtData): boolean {
+  return (
+    typeof data.loanStartDate === "string" &&
+    data.loanStartDate.length > 0 &&
+    typeof data.loanEndDate === "string" &&
+    data.loanEndDate.length > 0
+  );
+}
+
+/**
+ * Returns true if the debt position is paid off.
+ */
+export function isDebtPaidOff(data: DebtData): boolean {
+  return data.paidOff === true;
+}
+
+/**
+ * Returns true if the debt position is archived.
+ */
+export function isDebtArchived(data: DebtData): boolean {
+  return data.archived === true;
 }
 
 // ──────────────────────────────────────────
@@ -224,6 +365,11 @@ export interface Position {
    * Undefined for all other asset types.
    */
   mortgageData?: MortgageData;
+  /**
+   * Additional data for debt positions (CREDIT_CARD, LOAN, STUDENT_LOAN, AUTO_LOAN, BNPL).
+   * Undefined for all other asset types.
+   */
+  debtData?: DebtData;
   /** ISO 8601 timestamp when this position was added */
   addedAt: string;
 }

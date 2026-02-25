@@ -29,24 +29,43 @@ Portfolio Tracker is a Raycast extension that lets you create investment account
 ```
 Portfolio
 ├── Account[]
-│   ├── id, name, type (ISA | SIPP | GIA | Brokerage | ...)
+│   ├── id, name, type (ISA | SIPP | GIA | Brokerage | Debt | ...)
 │   └── Position[]
 │       ├── id, symbol, name, customName?, units, currency, assetType
+│       ├── mortgageData?   (MORTGAGE / OWNED_PROPERTY positions)
+│       ├── debtData?       (CREDIT_CARD / LOAN / STUDENT_LOAN / AUTO_LOAN / BNPL positions)
 │       └── addedAt
+└── updatedAt
+
+DebtData
+├── currentBalance, apr, monthlyRepayment, repaymentDayOfMonth
+├── enteredAt
+├── loanStartDate?, loanEndDate?, totalTermMonths?   (loan progress tracking)
+├── paidOff?      (greyed-out strikethrough display when true)
+└── archived?     (hidden from default view, excluded from totals)
+
+DebtRepaymentLog (separate LocalStorage key: "debt-repayments")
+├── entries[]
+│   ├── positionId, appliedCount, cachedBalance
+│   ├── cumulativeInterest, cumulativePrincipal
+│   └── lastSyncedAt
 └── updatedAt
 ```
 
 > **Custom Names:** When `customName` is set on a position, it is used as the display name everywhere in the UI. The original Yahoo Finance `name` is preserved and shown on hover tooltips and in the detail panel. This is useful when Yahoo returns cryptic or unhelpful names for certain assets.
 
+> **Debt Tracking:** Debt account positions are valued as liabilities — their balances are **subtracted** from the portfolio total to produce a net worth figure. Repayments are auto-tracked: on each portfolio load, the system checks if a repayment day has passed since the last sync and applies the monthly update (interest accrual + repayment deduction) using the formula `newBalance = oldBalance × (1 + APR/12/100) − monthlyRepayment`. For loan types, the monthly repayment can be auto-calculated from start/end dates using a standard amortisation formula.
+
 All data is stored locally using Raycast's `LocalStorage` API. No external database or account required.
 
 ### Storage & Caching Strategy
 
-| What           | Where                      | Granularity                           |
-| -------------- | -------------------------- | ------------------------------------- |
-| Portfolio data | `LocalStorage` (persisted) | Per-mutation (add/edit/delete)        |
-| Asset prices   | `Cache` (in-memory + disk) | Daily — `price:{symbol}:{YYYY-MM-DD}` |
-| FX rates       | `Cache` (in-memory + disk) | Daily — `fx:{from}:{to}:{YYYY-MM-DD}` |
+| What            | Where                      | Granularity                           |
+| --------------- | -------------------------- | ------------------------------------- |
+| Portfolio data  | `LocalStorage` (persisted) | Per-mutation (add/edit/delete)        |
+| Asset prices    | `Cache` (in-memory + disk) | Daily — `price:{symbol}:{YYYY-MM-DD}` |
+| FX rates        | `Cache` (in-memory + disk) | Daily — `fx:{from}:{to}:{YYYY-MM-DD}` |
+| Debt repayments | `LocalStorage` (persisted) | Per-sync — `debt-repayments`          |
 
 The daily cache ensures each symbol is fetched at most **once per day**, regardless of how many times you open the extension. Cache capacity is set to 5 MB (within Raycast's 10 MB default).
 

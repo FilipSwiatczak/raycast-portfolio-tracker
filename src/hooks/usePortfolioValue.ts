@@ -5,14 +5,14 @@
  * (accounts + positions) and computes the full valuation tree:
  *
  *   PortfolioValuation
- *   ├── totalValue (in base currency)
+ *   ├── totalValue (in base currency, net of debt)
  *   ├── baseCurrency
  *   └── accounts[]
- *       ├── totalBaseValue
+ *       ├── totalBaseValue (negative for debt accounts)
  *       └── positions[]
  *           ├── currentPrice (native currency)
- *           ├── totalNativeValue (units × price)
- *           ├── totalBaseValue (native × FX rate)
+ *           ├── totalNativeValue (units × price, negative for debt)
+ *           ├── totalBaseValue (native × FX rate, negative for debt)
  *           ├── change / changePercent
  *           └── fxRate
  *
@@ -21,8 +21,9 @@
  * 2. Batch-fetch prices (via daily cache — at most 1 API call per symbol per day)
  * 3. Collect all unique currencies and fetch FX rates to base currency
  * 4. Fetch HPI data for property positions (via property-price service)
- * 5. Compute per-position, per-account, and total valuations
- * 6. Expose loading, error, and refresh states
+ * 5. Sync debt repayments and compute debt balances (via debt-repayments service)
+ * 6. Compute per-position, per-account, and total valuations
+ * 7. Expose loading, error, and refresh states
  *
  * Design:
  * - Composes `useAssetPrices` for price data and manages FX rates directly
@@ -31,6 +32,9 @@
  * - Handles partial failures gracefully (missing prices/FX rates don't crash the whole view)
  * - Property positions (MORTGAGE / OWNED_PROPERTY) are valued via UK HPI data
  *   and mortgage amortization calculations, not Yahoo Finance quotes
+ * - Debt positions (CREDIT_CARD, LOAN, etc.) are valued via local repayment
+ *   tracking — their values are SUBTRACTED from the portfolio total to produce
+ *   a net worth figure
  */
 
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
@@ -48,11 +52,14 @@ import {
   AssetType,
   Position,
   isPropertyAssetType,
+  isDebtAssetType,
+  isDebtArchived,
 } from "../utils/types";
 import { getCachedPrices, getCachedFxRates } from "../services/price-cache";
 import { createPortfolioError } from "../utils/errors";
 import { PropertyPriceChange, getPropertyPriceChange, getPropertyPriceChangeSync } from "../services/property-price";
 import { calculateCurrentEquity } from "../services/mortgage-calculator";
+import { SyncResult, syncAllRepayments } from "../services/debt-repayments";
 
 // ──────────────────────────────────────────
 // Return Type
@@ -121,6 +128,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
   const [prices, setPrices] = useState<Map<string, CachedPrice>>(new Map());
   const [fxRates, setFxRates] = useState<Map<string, CachedFxRate>>(new Map());
   const [hpiData, setHpiData] = useState<Map<string, PropertyPriceChange>>(new Map());
+  const [debtSyncResults, setDebtSyncResults] = useState<Map<string, SyncResult>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<PortfolioError[]>([]);
 
@@ -135,30 +143,38 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
     };
   }, []);
 
-  // ── Extract unique symbols, currencies, and property positions from the portfolio ──
+  // ── Extract unique symbols, currencies, property positions, and debt positions from the portfolio ──
 
-  const { symbols, currencies, propertyPositions } = useMemo(() => {
+  const { symbols, currencies, propertyPositions, debtPositions } = useMemo(() => {
     if (!portfolio || portfolio.accounts.length === 0) {
       return {
         symbols: [] as string[],
         currencies: [] as string[],
         propertyPositions: [] as Position[],
+        debtPositions: [] as Array<{ positionId: string; debtData: NonNullable<Position["debtData"]> }>,
       };
     }
 
     const symbolSet = new Set<string>();
     const currencySet = new Set<string>();
     const propPositions: Position[] = [];
+    const debtPos: Array<{ positionId: string; debtData: NonNullable<Position["debtData"]> }> = [];
 
     for (const account of portfolio.accounts) {
       for (const position of account.positions) {
         // CASH positions don't have a tradeable symbol — skip them from API fetches.
         // Their price is always 1.0 per unit of their currency.
         // MORTGAGE / OWNED_PROPERTY positions use HPI data, not Yahoo Finance.
+        // DEBT positions use local repayment tracking, not Yahoo Finance.
         if (position.assetType === AssetType.CASH || isPropertyAssetType(position.assetType)) {
           // Property positions are collected separately for HPI fetching
           if (isPropertyAssetType(position.assetType) && position.mortgageData) {
             propPositions.push(position);
+          }
+        } else if (isDebtAssetType(position.assetType)) {
+          // Debt positions are collected for repayment sync
+          if (position.debtData) {
+            debtPos.push({ positionId: position.id, debtData: position.debtData });
           }
         } else {
           symbolSet.add(position.symbol);
@@ -171,6 +187,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       symbols: [...symbolSet],
       currencies: [...currencySet],
       propertyPositions: propPositions,
+      debtPositions: debtPos,
     };
   }, [portfolio]);
 
@@ -181,12 +198,14 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
     // or currencies that need FX rates. Only skip entirely if truly empty.
     const hasTradeableSymbols = symbols.length > 0;
     const hasPropertyPositions = propertyPositions.length > 0;
+    const hasDebtPositions = debtPositions.length > 0;
     const hasCurrencies = currencies.length > 0;
 
-    if (!hasTradeableSymbols && !hasPropertyPositions && !hasCurrencies) {
+    if (!hasTradeableSymbols && !hasPropertyPositions && !hasDebtPositions && !hasCurrencies) {
       setPrices(new Map());
       setFxRates(new Map());
       setHpiData(new Map());
+      setDebtSyncResults(new Map());
       setErrors([]);
       setIsLoading(false);
       return;
@@ -219,10 +238,17 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       const hpiTask = fetchPropertyHPIData(propertyPositions);
       tasks.push(hpiTask);
 
-      const [priceResult, fxResult, hpiResult] = (await Promise.all(tasks)) as [
+      // Task 3: Debt repayment sync (auto-apply any due repayments)
+      const debtTask = hasDebtPositions
+        ? syncAllRepayments(debtPositions)
+        : Promise.resolve(new Map<string, SyncResult>());
+      tasks.push(debtTask);
+
+      const [priceResult, fxResult, hpiResult, debtResult] = (await Promise.all(tasks)) as [
         { prices: Map<string, CachedPrice>; errors: Array<{ symbol: string; error: unknown }> },
         Map<string, CachedFxRate>,
         Map<string, PropertyPriceChange>,
+        Map<string, SyncResult>,
       ];
 
       // Discard if a newer fetch has started
@@ -231,6 +257,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       setPrices(priceResult.prices);
       setFxRates(fxResult);
       setHpiData(hpiResult);
+      setDebtSyncResults(debtResult);
 
       // Collect errors from price fetches
       const fetchErrors: PortfolioError[] = priceResult.errors.map(({ symbol, error }) =>
@@ -246,7 +273,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
         setIsLoading(false);
       }
     }
-  }, [symbols, currencies, propertyPositions, baseCurrency]);
+  }, [symbols, currencies, propertyPositions, debtPositions, baseCurrency]);
 
   // ── Trigger fetch when dependencies change ──
 
@@ -261,10 +288,51 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
 
     // We can compute a partial valuation even if some prices are missing.
     // Positions without prices will show as zero value.
+    // Debt positions produce NEGATIVE values (subtracted from portfolio total).
     const accountValuations: AccountValuation[] = portfolio.accounts.map((account) => {
       const positionValuations: PositionValuation[] = account.positions.map((position) => {
         const fxData = fxRates.get(position.currency);
         const fxRate = fxData?.rate ?? 1.0;
+
+        // ── DEBT positions: valued via local repayment sync, negative in portfolio total.
+        // Archived debt positions contribute 0 to the total.
+        if (isDebtAssetType(position.assetType) && position.debtData) {
+          const isArchived = isDebtArchived(position.debtData);
+
+          if (isArchived) {
+            // Archived debts don't affect portfolio value
+            return {
+              position,
+              currentPrice: 0,
+              totalNativeValue: 0,
+              totalBaseValue: 0,
+              change: 0,
+              changePercent: 0,
+              fxRate,
+            };
+          }
+
+          const syncResult = debtSyncResults.get(position.id);
+          // Use synced balance if available, otherwise fall back to the raw balance
+          const currentBalance = syncResult?.currentBalance ?? position.debtData.currentBalance;
+
+          // Debt is a LIABILITY — its value is negative in the portfolio
+          const totalNativeValue = -currentBalance;
+          const totalBaseValue = totalNativeValue * fxRate;
+
+          // "Change" for debt: how much the balance decreased this period
+          // (positive change = balance went down = good)
+          // We don't have daily market data for debt, so change is 0
+          return {
+            position,
+            currentPrice: currentBalance, // show absolute balance as the "price"
+            totalNativeValue,
+            totalBaseValue,
+            change: 0,
+            changePercent: 0,
+            fxRate,
+          };
+        }
 
         // ── CASH positions: price is always 1.0, no daily change, value = units directly.
         if (position.assetType === AssetType.CASH) {
@@ -370,7 +438,7 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
       baseCurrency,
       lastUpdated: latestFetch || new Date().toISOString(),
     };
-  }, [portfolio, prices, fxRates, hpiData, baseCurrency]);
+  }, [portfolio, prices, fxRates, hpiData, debtSyncResults, baseCurrency]);
 
   // ── Refresh function ──
 

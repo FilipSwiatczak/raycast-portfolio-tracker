@@ -39,6 +39,7 @@ import {
   SortField,
   SortDirection,
   isPropertyAssetType,
+  isDebtAssetType,
 } from "../utils/types";
 import { formatCurrency, formatCurrencyCompact, formatRelativeTime, getDisplayName } from "../utils/formatting";
 import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_COLORS, SORT_OPTIONS, DEFAULT_SORT_KEY } from "../utils/constants";
@@ -87,6 +88,21 @@ export interface PortfolioListProps {
   /** Navigate to the "Add Property" form for a Property account */
   onAddProperty: (accountId: string) => void;
 
+  /** Navigate to the "Add Debt" form for a Debt account */
+  onAddDebt: (accountId: string) => void;
+
+  /** Navigate to the "Edit Debt" form for a debt position */
+  onEditDebtPosition: (account: Account, position: Position) => void;
+
+  /** Archive/unarchive a debt position */
+  onArchiveDebt: (accountId: string, positionId: string) => Promise<void>;
+
+  /** Whether archived debt positions are currently visible */
+  showArchivedDebt: boolean;
+
+  /** Toggle visibility of archived debt positions */
+  onToggleArchivedDebt: () => void;
+
   /** Navigate to the "Edit Property" form for a MORTGAGE/OWNED_PROPERTY position */
   onEditPropertyPosition: (account: Account, position: Position) => void;
 
@@ -130,6 +146,11 @@ export function PortfolioList({
   onAddPosition,
   onAddCash,
   onAddProperty,
+  onAddDebt,
+  onEditDebtPosition,
+  onArchiveDebt,
+  showArchivedDebt,
+  onToggleArchivedDebt,
   onEditPropertyPosition,
   onShowCalculations,
   onEditPosition,
@@ -150,6 +171,12 @@ export function PortfolioList({
   const hasAccounts = (portfolio?.accounts.length ?? 0) > 0;
   const hasPositions = portfolio?.accounts.some((a) => a.positions.length > 0) ?? false;
   const showSampleBanner = hasAccounts && hasSampleAccounts(portfolio?.accounts ?? []);
+
+  // Check if there are any archived debt positions (for the toggle action)
+  const hasArchivedDebt =
+    portfolio?.accounts.some((a) =>
+      a.positions.some((p) => isDebtAssetType(p.assetType) && p.debtData?.archived === true),
+    ) ?? false;
 
   // Resolve the current sort option from the key
   const currentSort = SORT_OPTIONS.find((o) => o.key === sortKey) ?? SORT_OPTIONS[0];
@@ -187,6 +214,15 @@ export function PortfolioList({
       onAction={() => setIsShowingDetail((prev) => !prev)}
     />
   );
+
+  const toggleArchivedAction = hasArchivedDebt ? (
+    <Action
+      title={showArchivedDebt ? "Hide Archived Debt" : "Show Archived Debt"}
+      icon={showArchivedDebt ? Icon.EyeDisabled : Icon.Tray}
+      shortcut={{ modifiers: ["ctrl", "shift"], key: "a" }}
+      onAction={onToggleArchivedDebt}
+    />
+  ) : undefined;
 
   // ── Render ──
 
@@ -291,13 +327,18 @@ export function PortfolioList({
           sortField={currentSort.field}
           sortDirection={currentSort.direction}
           isShowingDetail={isShowingDetail}
+          showArchivedDebt={showArchivedDebt}
           toggleDetailAction={toggleDetailAction}
+          toggleArchivedAction={toggleArchivedAction}
           onAddAccount={onAddAccount}
           onEditAccount={onEditAccount}
           onDeleteAccount={onDeleteAccount}
           onAddPosition={onAddPosition}
           onAddCash={onAddCash}
           onAddProperty={onAddProperty}
+          onAddDebt={onAddDebt}
+          onEditDebtPosition={onEditDebtPosition}
+          onArchiveDebt={onArchiveDebt}
           onEditPropertyPosition={onEditPropertyPosition}
           onShowCalculations={onShowCalculations}
           onEditPosition={onEditPosition}
@@ -339,13 +380,18 @@ interface AccountSectionProps {
   sortField: SortField;
   sortDirection: SortDirection;
   isShowingDetail: boolean;
+  showArchivedDebt: boolean;
   toggleDetailAction: React.JSX.Element;
+  toggleArchivedAction?: React.JSX.Element;
   onAddAccount: () => void;
   onEditAccount: (account: Account) => void;
   onDeleteAccount: (accountId: string) => Promise<void>;
   onAddPosition: (accountId: string) => void;
   onAddCash: (accountId: string) => void;
   onAddProperty: (accountId: string) => void;
+  onAddDebt: (accountId: string) => void;
+  onEditDebtPosition: (account: Account, position: Position) => void;
+  onArchiveDebt: (accountId: string, positionId: string) => Promise<void>;
   onEditPropertyPosition: (account: Account, position: Position) => void;
   onShowCalculations: (position: Position, hpiChangePercent: number) => void;
   onEditPosition: (account: Account, position: Position) => void;
@@ -361,13 +407,18 @@ function AccountSection({
   sortField,
   sortDirection,
   isShowingDetail,
+  showArchivedDebt,
   toggleDetailAction,
+  toggleArchivedAction,
   onAddAccount,
   onEditAccount,
   onDeleteAccount,
   onAddPosition,
   onAddCash,
   onAddProperty,
+  onAddDebt,
+  onEditDebtPosition,
+  onArchiveDebt,
   onEditPropertyPosition,
   onShowCalculations,
   onEditPosition,
@@ -392,9 +443,20 @@ function AccountSection({
 
   // ── Sort Positions ──
 
+  // Filter out archived debt positions unless showArchivedDebt is on
+  const visiblePositions = useMemo(() => {
+    if (showArchivedDebt) return positions;
+    return positions.filter((pv) => {
+      if (isDebtAssetType(pv.position.assetType) && pv.position.debtData?.archived) {
+        return false;
+      }
+      return true;
+    });
+  }, [positions, showArchivedDebt]);
+
   const sortedPositions = useMemo(() => {
-    return sortPositions(positions, sortField, sortDirection);
-  }, [positions, sortField, sortDirection]);
+    return sortPositions(visiblePositions, sortField, sortDirection);
+  }, [visiblePositions, sortField, sortDirection]);
 
   return (
     <List.Section title={account.name} subtitle={sectionSubtitle}>
@@ -412,6 +474,7 @@ function AccountSection({
                 onAddPosition={() => onAddPosition(account.id)}
                 onAddCash={() => onAddCash(account.id)}
                 onAddProperty={() => onAddProperty(account.id)}
+                onAddDebt={() => onAddDebt(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -429,6 +492,7 @@ function AccountSection({
       {/* ── Sorted Position Items ── */}
       {sortedPositions.map((positionVal) => {
         const isPropertyPos = isPropertyAssetType(positionVal.position.assetType);
+        const isDebtPos = isDebtAssetType(positionVal.position.assetType);
         return (
           <PositionListItem
             key={positionVal.position.id}
@@ -442,12 +506,17 @@ function AccountSection({
                   position={positionVal.position}
                   accountId={account.id}
                   isProperty={isPropertyPos}
+                  isDebt={isDebtPos}
                   onAddUnits={() => onAddUnits(account, positionVal.position)}
                   onEditPosition={() =>
                     isPropertyPos
                       ? onEditPropertyPosition(account, positionVal.position)
-                      : onEditPosition(account, positionVal.position)
+                      : isDebtPos
+                        ? onEditDebtPosition(account, positionVal.position)
+                        : onEditPosition(account, positionVal.position)
                   }
+                  onEditDebt={isDebtPos ? () => onEditDebtPosition(account, positionVal.position) : undefined}
+                  onArchiveDebt={isDebtPos ? () => onArchiveDebt(account.id, positionVal.position.id) : undefined}
                   onAddValuation={
                     isPropertyPos ? () => onEditPropertyPosition(account, positionVal.position) : undefined
                   }
@@ -463,6 +532,7 @@ function AccountSection({
                   onAddPosition={() => onAddPosition(account.id)}
                   onAddCash={() => onAddCash(account.id)}
                   onAddProperty={() => onAddProperty(account.id)}
+                  onAddDebt={() => onAddDebt(account.id)}
                   onEditAccount={() => onEditAccount(account)}
                   onDeleteAccount={async () => await onDeleteAccount(account.id)}
                 />
@@ -472,6 +542,7 @@ function AccountSection({
                   onSearchInvestments={onSearchInvestments}
                   toggleDetailAction={toggleDetailAction}
                 />
+                {toggleArchivedAction && <ActionPanel.Section title="Debt">{toggleArchivedAction}</ActionPanel.Section>}
               </ActionPanel>
             }
           />
@@ -479,7 +550,7 @@ function AccountSection({
       })}
 
       {/* ── Account Summary Row (pinned to bottom) ── */}
-      {positionCount > 0 && (
+      {visiblePositions.length > 0 && (
         <List.Item
           icon={{ source: Icon.Coins, tintColor: typeColor }}
           title={`${account.name} Total`}
@@ -525,6 +596,7 @@ function AccountSection({
                 onAddPosition={() => onAddPosition(account.id)}
                 onAddCash={() => onAddCash(account.id)}
                 onAddProperty={() => onAddProperty(account.id)}
+                onAddDebt={() => onAddDebt(account.id)}
                 onEditAccount={() => onEditAccount(account)}
                 onDeleteAccount={() => onDeleteAccount(account.id)}
               />
@@ -534,6 +606,7 @@ function AccountSection({
                 onSearchInvestments={onSearchInvestments}
                 toggleDetailAction={toggleDetailAction}
               />
+              {toggleArchivedAction && <ActionPanel.Section title="Debt">{toggleArchivedAction}</ActionPanel.Section>}
             </ActionPanel>
           }
         />

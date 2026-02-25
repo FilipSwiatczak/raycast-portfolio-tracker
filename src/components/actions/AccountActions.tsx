@@ -28,7 +28,7 @@
 
 import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
-import { Account, isPropertyAccountType } from "../../utils/types";
+import { Account, isPropertyAccountType, isDebtAccountType } from "../../utils/types";
 import { ACCOUNT_TYPE_LABELS } from "../../utils/constants";
 
 // ──────────────────────────────────────────
@@ -47,6 +47,9 @@ interface AccountActionsProps {
 
   /** Callback to navigate to the "Add Property" form for this account */
   onAddProperty?: () => void;
+
+  /** Callback to navigate to the "Add Debt" form for this account */
+  onAddDebt?: () => void;
 
   /** Callback to navigate to the edit form for this account */
   onEditAccount: () => void;
@@ -75,8 +78,9 @@ interface AccountActionsProps {
  * warning the user that all positions within the account will be lost.
  *
  * Keyboard shortcuts:
- * - ⇧⌘N → Add Position to this account (hidden for Property accounts)
+ * - ⇧⌘N → Add Position to this account (hidden for Property/Debt accounts)
  * - ⇧⌘P → Add Property to this account (Property accounts only)
+ * - ⇧⌘D → Add Debt to this account (Debt accounts only)
  * - ⇧⌘C → Add Cash to this account
  * - ⌘E → Edit Account
  * - ⌃X → Delete Account (with confirmation)
@@ -86,12 +90,14 @@ export function AccountActions({
   onAddPosition,
   onAddCash,
   onAddProperty,
+  onAddDebt,
   onEditAccount,
   onDeleteAccount,
 }: AccountActionsProps): React.JSX.Element {
   const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
   const positionCount = account.positions.length;
   const isProperty = isPropertyAccountType(account.type);
+  const isDebt = isDebtAccountType(account.type);
 
   /**
    * Shows a confirmation dialog before deleting the account.
@@ -133,8 +139,18 @@ export function AccountActions({
         />
       )}
 
-      {/* Non-property accounts show "Add Position" (Yahoo search) */}
-      {!isProperty && (
+      {/* Debt accounts show "Add Debt" as the primary add action */}
+      {isDebt && onAddDebt && (
+        <Action
+          title="Add Debt"
+          icon={Icon.CreditCard}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+          onAction={onAddDebt}
+        />
+      )}
+
+      {/* Non-property, non-debt accounts show "Add Position" (Yahoo search) */}
+      {!isProperty && !isDebt && (
         <Action
           title="Add Position"
           icon={Icon.PlusSquare}

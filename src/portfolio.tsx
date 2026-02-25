@@ -15,7 +15,7 @@
  */
 
 import React from "react";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigation, updateCommandMetadata, showToast, Toast } from "@raycast/api";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { usePortfolioValue } from "./hooks/usePortfolioValue";
@@ -27,10 +27,12 @@ import { AddCashForm } from "./components/AddCashForm";
 import { AddMortgageForm } from "./components/AddMortgageForm";
 import { EditMortgageForm } from "./components/EditMortgageForm";
 import { MortgageCalculationsDetail } from "./components/MortgageCalculationsDetail";
+import { AddDebtForm } from "./components/AddDebtForm";
+import { EditDebtForm } from "./components/EditDebtForm";
 import { SearchInvestmentsView } from "./components/SearchInvestmentsView";
 import { SearchInvestmentsFlow } from "./components/SearchInvestmentsFlow";
 import { BatchRenameMatch } from "./components/BatchRenameForm";
-import { Account, Position, AccountType, isPropertyAssetType } from "./utils/types";
+import { Account, Position, AccountType, isPropertyAssetType, isDebtAssetType } from "./utils/types";
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
 import { clearPriceCache } from "./services/price-cache";
 import { SAMPLE_ACCOUNTS, isSampleAccount } from "./utils/sample-portfolio";
@@ -54,6 +56,8 @@ export default function PortfolioCommand(): React.JSX.Element {
     addPosition,
     updatePosition,
     updatePropertyPosition,
+    updateDebtPosition,
+    archiveDebtPosition,
     renamePosition,
     restorePositionName,
     batchRenamePositions,
@@ -70,6 +74,9 @@ export default function PortfolioCommand(): React.JSX.Element {
   } = usePortfolioValue(portfolio);
 
   const isLoading = isPortfolioLoading || isValuationLoading;
+
+  // ── Archived Debt Toggle State ──
+  const [showArchivedDebt, setShowArchivedDebt] = useState(false);
 
   // ── Update Command Metadata ──
   // This sets the grey subtitle text visible in Raycast's search bar
@@ -236,6 +243,50 @@ export default function PortfolioCommand(): React.JSX.Element {
     );
   }
 
+  function handleAddDebt(accountId: string): void {
+    const account = portfolio?.accounts.find((a) => a.id === accountId);
+    const accountName = account?.name ?? "Account";
+
+    push(
+      <AddDebtForm
+        accountId={accountId}
+        accountName={accountName}
+        baseCurrency={baseCurrency}
+        onConfirm={async (params) => {
+          await addPosition(accountId, params);
+        }}
+      />,
+    );
+  }
+
+  function handleEditDebtPosition(account: Account, position: Position): void {
+    if (!isDebtAssetType(position.assetType)) return;
+
+    push(
+      <EditDebtForm
+        position={position}
+        accountId={account.id}
+        accountName={account.name}
+        baseCurrency={baseCurrency}
+        onSave={async (updates) => {
+          await updateDebtPosition(account.id, position.id, updates);
+        }}
+        onDone={() => {
+          pop();
+          revalidatePortfolio();
+        }}
+      />,
+    );
+  }
+
+  async function handleArchiveDebt(accountId: string, positionId: string): Promise<void> {
+    await archiveDebtPosition(accountId, positionId);
+  }
+
+  function handleToggleArchivedDebt(): void {
+    setShowArchivedDebt((prev) => !prev);
+  }
+
   function handleShowCalculations(position: Position, hpiChangePercent: number): void {
     if (!isPropertyAssetType(position.assetType)) return;
 
@@ -346,6 +397,11 @@ export default function PortfolioCommand(): React.JSX.Element {
       onAddPosition={handleAddPosition}
       onAddCash={handleAddCash}
       onAddProperty={handleAddProperty}
+      onAddDebt={handleAddDebt}
+      onEditDebtPosition={handleEditDebtPosition}
+      onArchiveDebt={handleArchiveDebt}
+      showArchivedDebt={showArchivedDebt}
+      onToggleArchivedDebt={handleToggleArchivedDebt}
       onEditPropertyPosition={handleEditPropertyPosition}
       onShowCalculations={handleShowCalculations}
       onEditPosition={handleEditPosition}
