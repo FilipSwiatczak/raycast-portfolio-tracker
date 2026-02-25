@@ -1,15 +1,15 @@
 ## PHASE 1: MVP (Completed)
 
-1. Base functionality: accounts, positions, apis, raycast front-end ✅
+1. **Base functionality**: accounts, positions, apis, raycast front-end ✅
 2. Prettify the UI and UX (this is a conversation mode - I'll describe in detail, back and forth with hot-reloads) ✅
-3. Add cash positions handling ✅
-4. Add option to rename assets - custom name. Where over hover and in detailed view it would show original name. This is sometimes needed when Yahoo api returns cryptic names for certain assets. Batch rename is also supported where post-renaming a tooltip asks if other matchins assets should be renamed ✅
+3. **Add cash positions handling** ✅
+4. **Add option to rename assets** - custom name. Where over hover and in detailed view it would show original name. This is sometimes needed when Yahoo api returns cryptic names for certain assets. Batch rename is also supported where post-renaming a tooltip asks if other matchins assets should be renamed ✅
 5. Add a github pipeline for unit testing and linting, with separate PR branch and main treatment. ✅
 6. Fix "Add Position", where after adding, the context returns to search, leading user to believe the next search would add another position. This is a good flow overall. However the next search and "Add" in fact overwrites the previous position. Keep the flow but fix so that the next search Add adds a new position. ✅
 
 ## PHASE 2: FIRE (In Progress)
 
-1. FIRE Dashboard — Financial Independence, Retire Early tracking. Separate command. 🔧
+1. **FIRE Dashboard — Financial Independence, Retire Early tracking.** Separate command. 🔧
    - Setup form: target value (with spending calculator helper), withdrawal rate, inflation, growth rate, year of birth, holiday entitlement, SIPP access age, account exclusion ✅
    - Projection engine: year-by-year compound growth with real returns (growth − inflation), half-year contribution approximation ✅
    - ASCII horizontal bar chart in Raycast Detail markdown with target line marker and 🎯 FIRE year highlight ✅
@@ -21,11 +21,12 @@
    - Show Contributions growth with different color to starting portfolio bulk sum ✅
    - Create pretty SVG chart with fallback to ASCII (later will expose as stylistic choice) ✅
    - Advanced: New SVG, below in the dashboard. Shows Split projection by accessible (ISA/GIA) vs locked (SIPP/401K) accounts with SIPP access age gate. Clear values shown on each bar part. So in each interval, two bar parts with two values displayed right over them. ✅
-2. Make SVG charts clickable to enlarge them in a new window (they are very small). Make them Downloadable. On-hover display a short calculation summary that showcases the essential aspects of each calculation. Use sample values from the chart to illustrate. ✅
-3. Manage Contributions: add Edit contribution. Currently only Add and Delete. (FireDashboard.tsx line 417) ✅
+2. **Make SVG charts enlargeable and downloadable.** ✅
+3. **Manage Contributions: add Edit contribution**. Currently only Add and Delete. (FireDashboard.tsx line 417) ✅
 4. At the top of the FIRE Dashboard, when it says you're on track, it currently checks for 30 years flat. It should, in the initial FIRE screen, and on fire settings, have a field at the top to ask for Target FIRE age OR Target FIRE year. Calculations proceed as usual unaffected just the top then display on target or not for that amount. ✅
 5. Fix "Search Investments" not to assume an Account but start search without account selected, then on found entry move to another sceen to add to account -> select account (with option to add new account) -> confirm asset details (with option to edit name, units, price) -> add position. ✅
-6. Add Property handling (Including Mortgage) as an asset class. On addition ask for Total Value, Current Equity, date of valuation and post code. Create a service to fetch the price percentage change since valuation date based on the postcode (using a property price index). ✅
+6. **Add Property handling (Including Mortgage) as an asset class**.
+   On addition ask for Total Value, Current Equity, date of valuation and post code. Create a service to fetch the price percentage change since valuation date based on the postcode (using a property price index). ✅
    - Fix property-price test suite (`Color` mock missing from `@raycast/api` mock) ✅
    - Fix mortgage calculation display: HPI % is applied to full property value, displayed change % is now equity-relative (not raw HPI) so the user sees how much their equity grew ✅
    - Fix property row labels: "Price per unit" → "Equity", "Day change:" → "Change since valuation:", "Total value:" → "Equity:" ✅
@@ -38,7 +39,7 @@
    - "Show Calculations" action (⌥⌘K) — full step-by-step markdown breakdown with formula, numbers, emojis, and colours ✅
    - Validated against real-life mortgage with bank-confirmed figures (£470k property, 60% SO, -5.1% HPI) ✅
    - 65 new unit tests including real-life example validation (497 total) ✅
-7. Add Debt handling as an asset class. ✅
+7. **Add Debt handling as an asset class**. ✅
    - Account type: 💰🔻 Debt with five position types: 💳 Credit Card, 🏦 Loan, 📚💰 Student Loan, 🚗 Auto Loan, 💳 BNPL
    - Data model: `DebtData` interface with balance, APR, monthly repayment, repayment day of month, loan start/end dates
    - Debt calculator service (`services/debt-calculator.ts`): standard amortisation formula, monthly balance updates (interest + repayment), repayment schedule projection, loan progress tracking
@@ -50,9 +51,10 @@
    - Detail panel: outstanding balance, APR, monthly repayment, repayment day, loan progress, portfolio impact, original balance
    - FIRE integration: debt positions selectable as contribution targets (repayment = contribution)
    - 66 new unit tests for debt calculator (563 total) covering amortisation, monthly updates, repayment counting, loan progress, edge cases, and real-world scenarios (credit card, BNPL, student loan, auto loan)
-8. Add Import/Export functionality. Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, and last updated date. Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column. 🔧
+8. **Add Import/Export functionality**.
+   Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, and last updated date. Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column. 🔧
 9. Fix Portfolio Tracker "Day Change" showing as "+0.01%" where it should be "+1%" it's display 0.0X and then not mutplying by 100
-10. Fee Tracking: Add entry for fees on Account level and on each Position level. This is a new option in the Portfolio Tracker when editing and adding accounts and positions. Check the Yahoo API response it it includes asset type for Position (only ETFs attract annual fees). It's % based, anually. FIRE setting then have an option to "Adjust growth for Account Fees" and "Adjust growth for ETF Fees" which are ON by default. When ON, FIRE SVG chart calculations subtract a sum of (account fee + position fee) from the growth rate (negative possible). Then a new SVG Chart ("Fee Tracking") is present showing the total sum of all fees (bar stacked with two values: account fees and ETF fees) shown over time, with same format at the other SVGs.
+10. **Fee Tracking: Account level and ETF level** Add entry for fees on Account level and on each Position level. This is a new option in the Portfolio Tracker when editing and adding accounts and positions. Check the Yahoo API response it it includes asset type for Position (only ETFs attract annual fees). It's % based, anually. FIRE setting then have an option to "Adjust growth for Account Fees" and "Adjust growth for ETF Fees" which are ON by default. When ON, FIRE SVG chart calculations subtract a sum of (account fee + position fee) from the growth rate (negative possible). Then a new SVG Chart ("Fee Tracking") is present showing the total sum of all fees (bar stacked with two values: account fees and ETF fees) shown over time, with same format at the other SVGs.
 11. Visual Improvements - better FONT? More Colors. Consistency in Emojis. Better color composition.
 
 ## PHASE 3: Coast FIRE and Portfolio Analytics (Future)

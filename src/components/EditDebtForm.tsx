@@ -166,7 +166,9 @@ export function EditDebtForm({
 
   // ── Derived State ──
 
-  const isLoanType = isAmortisedDebtType(debtType as AssetType);
+  // Student loans are open-ended (no fixed end date), so they don't show loan term fields.
+  // LOAN and AUTO_LOAN are amortised with a known end date.
+  const isLoanType = isAmortisedDebtType(debtType as AssetType) && debtType !== AssetType.STUDENT_LOAN;
 
   // ── Loan Progress Info (display only) ──
 

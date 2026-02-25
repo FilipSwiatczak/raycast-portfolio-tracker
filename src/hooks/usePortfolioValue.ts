@@ -54,6 +54,7 @@ import {
   isPropertyAssetType,
   isDebtAssetType,
   isDebtArchived,
+  isDebtPaidOff,
 } from "../utils/types";
 import { getCachedPrices, getCachedFxRates } from "../services/price-cache";
 import { createPortfolioError } from "../utils/errors";
@@ -295,12 +296,14 @@ export function usePortfolioValue(portfolio: Portfolio | undefined): UsePortfoli
         const fxRate = fxData?.rate ?? 1.0;
 
         // ── DEBT positions: valued via local repayment sync, negative in portfolio total.
-        // Archived debt positions contribute 0 to the total.
+        // Archived or paid-off debt positions contribute 0 to the total.
         if (isDebtAssetType(position.assetType) && position.debtData) {
           const isArchived = isDebtArchived(position.debtData);
+          const isPaidOff = isDebtPaidOff(position.debtData);
 
-          if (isArchived) {
-            // Archived debts don't affect portfolio value
+          if (isArchived || isPaidOff) {
+            // Paid-off and archived debts are excluded from portfolio value —
+            // the user has declared the liability settled.
             return {
               position,
               currentPrice: 0,

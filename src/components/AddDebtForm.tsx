@@ -130,8 +130,9 @@ export function AddDebtForm({ accountId, accountName, baseCurrency, onConfirm }:
 
   // ── Derived State ──
 
-  const isLoanType =
-    debtType === AssetType.LOAN || debtType === AssetType.STUDENT_LOAN || debtType === AssetType.AUTO_LOAN;
+  // Student loans are open-ended (no fixed end date), so they don't show loan term fields.
+  // LOAN and AUTO_LOAN are amortised with a known end date.
+  const isLoanType = debtType === AssetType.LOAN || debtType === AssetType.AUTO_LOAN;
 
   const isBNPL = debtType === AssetType.BNPL;
 

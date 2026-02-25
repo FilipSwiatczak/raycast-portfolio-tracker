@@ -159,12 +159,15 @@ export function AccountActions({
         />
       )}
 
-      <Action
-        title="Add Cash"
-        icon={Icon.BankNote}
-        shortcut={{ modifiers: ["ctrl", "cmd"], key: "c" }}
-        onAction={onAddCash}
-      />
+      {/* Cash deposits only make sense for investment/savings accounts */}
+      {!isDebt && !isProperty && (
+        <Action
+          title="Add Cash"
+          icon={Icon.BankNote}
+          shortcut={{ modifiers: ["ctrl", "cmd"], key: "c" }}
+          onAction={onAddCash}
+        />
+      )}
 
       <Action
         title="Edit Account"

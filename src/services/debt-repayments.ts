@@ -230,6 +230,35 @@ export async function syncPositionRepayments(
 }
 
 /**
+ * Resets the cached balance for a debt position in the repayment log.
+ *
+ * Called when a debt position is manually edited (e.g. the user corrects
+ * the outstanding balance). The `appliedCount` is preserved so the sync
+ * engine does not re-apply historical repayments — only future ones start
+ * from the new balance.
+ *
+ * @param positionId - The position whose cached balance should be reset
+ * @param newBalance - The new manually-entered balance to use as the baseline
+ */
+export async function resetCachedBalance(positionId: string, newBalance: number): Promise<void> {
+  const log = await loadRepaymentLog();
+  const entryIndex = log.entries.findIndex((e) => e.positionId === positionId);
+
+  if (entryIndex < 0) {
+    // No existing entry — nothing to reset; next sync will start from debtData.currentBalance
+    return;
+  }
+
+  log.entries[entryIndex] = {
+    ...log.entries[entryIndex],
+    cachedBalance: Math.max(0, newBalance),
+    lastSyncedAt: new Date().toISOString(),
+  };
+
+  await saveRepaymentLog(log);
+}
+
+/**
  * Syncs repayments for multiple debt positions in one pass.
  *
  * Loads the log once, applies all updates, then saves once.
@@ -250,8 +279,8 @@ export async function syncAllRepayments(
   let hasChanges = false;
 
   for (const { positionId, debtData } of positions) {
-    // Skip archived/paid-off positions
-    if (debtData.archived) continue;
+    // Skip archived or paid-off positions — they no longer accrue repayments
+    if (debtData.archived || debtData.paidOff) continue;
 
     const existing = log.entries.find((e) => e.positionId === positionId);
     const appliedCount = existing?.appliedCount ?? 0;

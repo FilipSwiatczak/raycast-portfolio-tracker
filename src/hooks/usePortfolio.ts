@@ -47,6 +47,7 @@ import {
 import { loadPortfolio, savePortfolio } from "../utils/storage";
 import { getDisplayName } from "../utils/formatting";
 import { generateId } from "../utils/uuid";
+import { resetCachedBalance } from "../services/debt-repayments";
 
 // ──────────────────────────────────────────
 // Return Type
@@ -523,6 +524,14 @@ export function usePortfolio(): UsePortfolioReturn {
             updatedAt: new Date().toISOString(),
           };
           await savePortfolio(updated);
+
+          // Reset the repayment log's cached balance when the debt data is manually
+          // edited so the next sync starts from the new currentBalance rather than
+          // the stale cachedBalance from a previous automatic sync.
+          if (updates.debtData !== undefined) {
+            await resetCachedBalance(positionId, updates.debtData.currentBalance);
+          }
+
           return updated;
         })(),
         {
@@ -538,13 +547,7 @@ export function usePortfolio(): UsePortfolioReturn {
           },
         },
       );
-
-      const posName = updates.customName ?? updates.name ?? "Debt";
-      await showToast({
-        style: Toast.Style.Success,
-        title: "Debt Updated",
-        message: posName,
-      });
+      // Note: toast is shown by the EditDebtForm after onSave resolves — no duplicate here.
     },
     [mutate],
   );

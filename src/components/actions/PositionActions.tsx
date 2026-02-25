@@ -33,6 +33,7 @@ import React from "react";
 import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
 import { Position, isDebtAssetType } from "../../utils/types";
 import { getDisplayName, hasCustomName, formatUnits } from "../../utils/formatting";
+import { ASSET_TYPE_LABELS } from "../../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -172,7 +173,13 @@ export function PositionActions({
 
   return (
     <>
-      <ActionPanel.Section title={`${displayName} (${position.symbol})`}>
+      <ActionPanel.Section
+        title={
+          isDebtPosition
+            ? `${displayName}: ${ASSET_TYPE_LABELS[position.assetType] ?? "Debt"}`
+            : `${displayName} (${position.symbol})`
+        }
+      >
         {/* Debt: Edit Debt is the default action */}
         {isDebtPosition ? (
           <>
