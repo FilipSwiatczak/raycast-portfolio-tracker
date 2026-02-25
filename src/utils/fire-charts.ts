@@ -548,9 +548,11 @@ export function computeSplitChartBars(
 export function buildProgressBar(currentValue: number, targetValue: number, baseCurrency: string): string {
   if (targetValue <= 0) return "";
 
-  const percent = Math.min(100, Math.round((currentValue / targetValue) * 100));
-  const filledCount = Math.round((percent / 100) * PROGRESS_WIDTH);
-  const emptyCount = PROGRESS_WIDTH - filledCount;
+  // Clamp to [0, 100] — currentValue can be negative when debt exceeds assets,
+  // which would produce a negative filledCount and throw RangeError in .repeat().
+  const percent = Math.max(0, Math.min(100, Math.round((currentValue / targetValue) * 100)));
+  const filledCount = Math.max(0, Math.round((percent / 100) * PROGRESS_WIDTH));
+  const emptyCount = Math.max(0, PROGRESS_WIDTH - filledCount);
 
   const bar = CHAR_FILLED.repeat(filledCount) + CHAR_EMPTY.repeat(emptyCount);
   const currentLabel = formatCompactValue(currentValue, baseCurrency);
@@ -658,8 +660,9 @@ export function buildProjectionChart(
   let prevTargetHit = false;
 
   for (const { year, portfolioValue, isTargetHit } of years) {
-    // Calculate filled width
-    const filledWidth = Math.round((portfolioValue / maxValue) * BAR_WIDTH);
+    // Calculate filled width — clamp to 0 so negative portfolio values (debt > assets)
+    // render as empty bars rather than producing a negative index in buildBar.
+    const filledWidth = Math.max(0, Math.round((portfolioValue / maxValue) * BAR_WIDTH));
 
     // Build the bar with optional target marker
     const bar = buildBar(BAR_WIDTH, filledWidth, targetPos);

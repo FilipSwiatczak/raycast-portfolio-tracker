@@ -786,6 +786,39 @@ describe("buildProgressBar", () => {
     const emptyCount = (barLine.match(/░/g) || []).length;
     expect(filledCount + emptyCount).toBe(32);
   });
+
+  // ── Debt / negative net-worth regression ──
+
+  it("does not throw when current value is negative (debt > assets)", () => {
+    // RangeError: Invalid count value: -1 was thrown before the fix
+    expect(() => buildProgressBar(-15_000, 1_000_000, "GBP")).not.toThrow();
+  });
+
+  it("shows 0% progress when current value is negative", () => {
+    const result = buildProgressBar(-15_000, 1_000_000, "GBP");
+    expect(result).toContain("0%");
+  });
+
+  it("shows fully empty bar when current value is negative", () => {
+    const result = buildProgressBar(-15_000, 1_000_000, "GBP");
+    expect(result).not.toContain("█");
+    expect(result).toContain("░");
+  });
+
+  it("still shows the actual negative current value label when in debt", () => {
+    const result = buildProgressBar(-15_000, 1_000_000, "GBP");
+    // formatCompactValue handles negatives — display should show -£15K
+    expect(result).toContain("-£15K");
+    expect(result).toContain("£1.0M");
+  });
+
+  it("bar has consistent total width of 32 characters when current value is negative", () => {
+    const result = buildProgressBar(-15_000, 1_000_000, "GBP");
+    const barLine = result.split("\n")[1];
+    const filledCount = (barLine.match(/█/g) || []).length;
+    const emptyCount = (barLine.match(/░/g) || []).length;
+    expect(filledCount + emptyCount).toBe(32);
+  });
 });
 
 // ──────────────────────────────────────────
@@ -932,14 +965,24 @@ describe("buildDashboardMarkdown", () => {
   };
 
   /** Build a minimal projection result */
-  function makeProjection(opts: { targetHit: boolean; fireYear?: number; fireAge?: number }): FireProjection {
+  function makeProjection(opts: {
+    targetHit: boolean;
+    fireYear?: number;
+    fireAge?: number;
+    /** Override the starting portfolio value (e.g. negative when debt > assets) */
+    currentPortfolioValue?: number;
+  }): FireProjection {
+    const startValue = opts.currentPortfolioValue ?? 200_000;
     const years: FireProjectionYear[] = [];
     for (let i = 0; i < 10; i++) {
+      // When starting negative, grow toward the target using a simple linear ramp
+      // so the projection is plausible without requiring the full calculator.
+      const portfolioValue = i === 0 ? startValue : 200_000 + i * 100_000;
       years.push({
         year: 2025 + i,
         age: 35 + i,
-        portfolioValue: 200_000 + i * 100_000,
-        isTargetHit: opts.targetHit && 200_000 + i * 100_000 >= 1_000_000,
+        portfolioValue,
+        isTargetHit: opts.targetHit && portfolioValue >= 1_000_000,
         isSippAccessible: false,
       });
     }
@@ -950,7 +993,7 @@ describe("buildDashboardMarkdown", () => {
       fireAge: opts.fireAge ?? null,
       daysToFire: opts.targetHit ? 2920 : null,
       workingDaysToFire: opts.targetHit ? 2320 : null,
-      currentPortfolioValue: 200_000,
+      currentPortfolioValue: startValue,
       annualContribution: 24_000,
       realGrowthRate: 0.045,
       targetValue: 1_000_000,
@@ -1198,6 +1241,47 @@ describe("buildDashboardMarkdown", () => {
     const result = buildDashboardMarkdown(projection, testSettings, "GBP", [], "dark");
     expect(result.growthSvg).toContain("<title>");
     expect(result.growthSvg).toContain("FIRE Growth Projection");
+  });
+
+  // ── Debt / negative net-worth regression ──
+  // When debt exceeds other assets, currentPortfolioValue is negative.
+  // buildProgressBar used to throw RangeError: Invalid count value: -1
+  // because percent went negative and was passed to String.repeat().
+
+  it("does not throw when current portfolio value is negative (debt > assets)", () => {
+    // Simulate a portfolio where outstanding debt exceeds invested assets.
+    // currentPortfolioValue of -15_000 is passed into the projection.
+    const negativeProjection = makeProjection({
+      targetHit: true,
+      fireYear: 2038,
+      fireAge: 48,
+      currentPortfolioValue: -15_000,
+    });
+    expect(() => buildDashboardMarkdown(negativeProjection, testSettings, "GBP", [], "dark")).not.toThrow();
+  });
+
+  it("renders 0% progress bar (not a negative bar) when portfolio is in net debt", () => {
+    const negativeProjection = makeProjection({
+      targetHit: true,
+      fireYear: 2038,
+      fireAge: 48,
+      currentPortfolioValue: -15_000,
+    });
+    const { markdown: md } = buildDashboardMarkdown(negativeProjection, testSettings, "GBP", [], "dark");
+    expect(md).toContain("0%");
+    expect(md).not.toContain("█"); // no filled bar characters
+  });
+
+  it("shows the actual negative current value label in the progress bar when in debt", () => {
+    const negativeProjection = makeProjection({
+      targetHit: true,
+      fireYear: 2038,
+      fireAge: 48,
+      currentPortfolioValue: -15_000,
+    });
+    const { markdown: md } = buildDashboardMarkdown(negativeProjection, testSettings, "GBP", [], "dark");
+    expect(md).toContain("-£15K");
+    expect(md).toContain("£1.0M");
   });
 });
 
