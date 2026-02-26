@@ -30,11 +30,13 @@ import {
   escapeCsvField,
   buildExportData,
   generateExportFilename,
+  buildAdditionalParameters,
+  parseAdditionalParameters,
   CSV_HEADERS,
   CsvRow,
   ExportPositionData,
 } from "../utils/csv-portfolio";
-import { Portfolio, Account, Position, AccountType, AssetType } from "../utils/types";
+import { Portfolio, Account, Position, AccountType, AssetType, MortgageData, DebtData } from "../utils/types";
 
 // ──────────────────────────────────────────
 // Test Helpers
@@ -84,7 +86,8 @@ function makeExportData(overrides: Partial<ExportPositionData> = {}): ExportPosi
 }
 
 function buildSimpleCsv(rows: string[]): string {
-  const header = "Account,Account Type,Asset Name,Symbol,Units,Price,Total Value,Currency,Asset Type,Last Updated";
+  const header =
+    "Account,Account Type,Asset Name,Symbol,Units,Price,Total Value,Currency,Asset Type,Last Updated,Additional Parameters";
   return [header, ...rows].join("\n");
 }
 
@@ -171,7 +174,7 @@ describe("parseCsvLine", () => {
     const fields = parseCsvLine(CSV_HEADERS.join(","));
     expect(fields).toHaveLength(CSV_HEADERS.length);
     expect(fields[0]).toBe("Account");
-    expect(fields[fields.length - 1]).toBe("Last Updated");
+    expect(fields[fields.length - 1]).toBe("Additional Parameters");
   });
 });
 
@@ -226,7 +229,18 @@ describe("mapHeaders", () => {
   });
 
   it("is case-insensitive", () => {
-    const { mapping, missing } = mapHeaders(["account", "account type", "asset name", "symbol", "units", "price", "total value", "currency", "asset type", "last updated"]);
+    const { mapping, missing } = mapHeaders([
+      "account",
+      "account type",
+      "asset name",
+      "symbol",
+      "units",
+      "price",
+      "total value",
+      "currency",
+      "asset type",
+      "last updated",
+    ]);
     expect(missing).toHaveLength(0);
     expect(mapping.get("Account")).toBe(0);
   });
@@ -276,7 +290,15 @@ describe("mapHeaders", () => {
   });
 
   it("handles extra columns gracefully", () => {
-    const { mapping, missing } = mapHeaders(["Account", "Extra1", "Asset Name", "Symbol", "Extra2", "Units", "Currency"]);
+    const { mapping, missing } = mapHeaders([
+      "Account",
+      "Extra1",
+      "Asset Name",
+      "Symbol",
+      "Extra2",
+      "Units",
+      "Currency",
+    ]);
     expect(missing).toHaveLength(0);
     expect(mapping.get("Account")).toBe(0);
     expect(mapping.get("Asset Name")).toBe(2);
@@ -394,7 +416,9 @@ describe("exportPortfolioToCsv", () => {
       assetType: AssetType.CREDIT_CARD,
       units: 1,
     });
-    const data = [makeExportData({ position: pos, currentPrice: 5000, totalValue: 5000, accountType: AccountType.DEBT })];
+    const data = [
+      makeExportData({ position: pos, currentPrice: 5000, totalValue: 5000, accountType: AccountType.DEBT }),
+    ];
     const csv = exportPortfolioToCsv(data);
     expect(csv).toContain("CREDIT_CARD");
     expect(csv).toContain("DEBT");
@@ -407,7 +431,9 @@ describe("exportPortfolioToCsv", () => {
       assetType: AssetType.MORTGAGE,
       units: 1,
     });
-    const data = [makeExportData({ position: pos, currentPrice: 350000, totalValue: 350000, accountType: AccountType.PROPERTY })];
+    const data = [
+      makeExportData({ position: pos, currentPrice: 350000, totalValue: 350000, accountType: AccountType.PROPERTY }),
+    ];
     const csv = exportPortfolioToCsv(data);
     expect(csv).toContain("MORTGAGE");
     expect(csv).toContain("PROPERTY");
@@ -449,9 +475,7 @@ describe("buildExportData", () => {
   });
 
   it("uses priceMap values when provided", () => {
-    const portfolio = makePortfolio([
-      makeAccount({ id: "a1" }, [makePosition({ id: "p1", units: 10 })]),
-    ]);
+    const portfolio = makePortfolio([makeAccount({ id: "a1" }, [makePosition({ id: "p1", units: 10 })])]);
 
     const priceMap = new Map([["p1", { price: 100, totalValue: 1000 }]]);
     const data = buildExportData(portfolio, priceMap);
@@ -471,9 +495,7 @@ describe("buildExportData", () => {
   });
 
   it("falls back to 0 when no price info available", () => {
-    const portfolio = makePortfolio([
-      makeAccount({ id: "a1" }, [makePosition({ id: "p1", units: 10 })]),
-    ]);
+    const portfolio = makePortfolio([makeAccount({ id: "a1" }, [makePosition({ id: "p1", units: 10 })])]);
 
     const data = buildExportData(portfolio);
     expect(data[0].currentPrice).toBe(0);
@@ -647,43 +669,81 @@ describe("parsePortfolioCsv", () => {
     expect(result.rows).toHaveLength(2);
   });
 
-  it("skips property (MORTGAGE) rows with a message", () => {
-    const csv = buildSimpleCsv(["Prop,PROPERTY,Main House,PROPERTY-1,1,350000,350000,GBP,MORTGAGE,2024-01-01"]);
+  it("skips property (MORTGAGE) rows without additional parameters", () => {
+    const csv = buildSimpleCsv(["Prop,PROPERTY,Main House,PROPERTY-1,1,350000,350000,GBP,MORTGAGE,2024-01-01,"]);
     const result = parsePortfolioCsv(csv);
     expect(result.rows).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);
-    expect(result.skipped[0].reason).toContain("specialised data");
+    expect(result.skipped[0].reason).toContain("additional parameters");
   });
 
-  it("skips debt (CREDIT_CARD) rows with a message", () => {
-    const csv = buildSimpleCsv(["Debt,DEBT,My Card,DEBT-CC,1,5000,5000,GBP,CREDIT_CARD,2024-01-01"]);
+  it("skips debt (CREDIT_CARD) rows without additional parameters", () => {
+    const csv = buildSimpleCsv(["Debt,DEBT,My Card,DEBT-CC,1,5000,5000,GBP,CREDIT_CARD,2024-01-01,"]);
     const result = parsePortfolioCsv(csv);
     expect(result.rows).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);
-    expect(result.skipped[0].reason).toContain("specialised data");
+    expect(result.skipped[0].reason).toContain("additional parameters");
   });
 
-  it("skips LOAN rows", () => {
-    const csv = buildSimpleCsv(["Debt,DEBT,Student,DEBT-SL,1,10000,10000,GBP,STUDENT_LOAN,2024-01-01"]);
+  it("skips LOAN rows without additional parameters", () => {
+    const csv = buildSimpleCsv(["Debt,DEBT,Student,DEBT-SL,1,10000,10000,GBP,STUDENT_LOAN,2024-01-01,"]);
     const result = parsePortfolioCsv(csv);
     expect(result.rows).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);
   });
 
-  it("skips BNPL rows", () => {
-    const csv = buildSimpleCsv(["Debt,DEBT,Klarna,DEBT-BNPL,1,500,500,GBP,BNPL,2024-01-01"]);
+  it("skips BNPL rows without additional parameters", () => {
+    const csv = buildSimpleCsv(["Debt,DEBT,Klarna,DEBT-BNPL,1,500,500,GBP,BNPL,2024-01-01,"]);
     const result = parsePortfolioCsv(csv);
     expect(result.rows).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);
+  });
+
+  it("imports MORTGAGE rows when additional parameters are provided", () => {
+    const params = JSON.stringify({
+      totalPropertyValue: 350000,
+      equity: 100000,
+      valuationDate: "2023-06-15",
+      postcode: "SW1A 1AA",
+      mortgageRate: 4.5,
+      mortgageTerm: 25,
+      mortgageStartDate: "2020-01-15",
+    });
+    const csv = buildSimpleCsv([
+      `Prop,PROPERTY,Main House,PROPERTY-1,1,350000,350000,GBP,MORTGAGE,2024-01-01,"${params.replace(/"/g, '""')}"`,
+    ]);
+    const result = parsePortfolioCsv(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.rows[0].assetType).toBe("MORTGAGE");
+    expect(result.rows[0].additionalParameters).toBeTruthy();
+  });
+
+  it("imports CREDIT_CARD rows when additional parameters are provided", () => {
+    const params = JSON.stringify({
+      currentBalance: 5000,
+      apr: 19.9,
+      repaymentDayOfMonth: 15,
+      monthlyRepayment: 300,
+      enteredAt: "2025-01-01T00:00:00Z",
+    });
+    const csv = buildSimpleCsv([
+      `Debt,DEBT,My Card,DEBT-CC,1,5000,5000,GBP,CREDIT_CARD,2024-01-01,"${params.replace(/"/g, '""')}"`,
+    ]);
+    const result = parsePortfolioCsv(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.rows[0].assetType).toBe("CREDIT_CARD");
+    expect(result.rows[0].additionalParameters).toBeTruthy();
   });
 
   it("handles mixed valid, invalid, and skipped rows", () => {
     const csv = buildSimpleCsv([
-      "ISA,ISA,Asset1,SYM1,10,100,1000,GBP,ETF,2024-01-01",      // valid
-      ",,,,,,,,,,",                                                 // invalid (empty fields)
-      "Prop,PROPERTY,House,PROP-1,1,350000,350000,GBP,MORTGAGE,2024-01-01", // skipped
-      "GIA,GIA,Asset2,SYM2,abc,100,1000,GBP,EQUITY,2024-01-01",   // error (non-numeric units)
-      "GIA,GIA,Asset3,SYM3,20,200,4000,USD,EQUITY,2024-06-01",    // valid
+      "ISA,ISA,Asset1,SYM1,10,100,1000,GBP,ETF,2024-01-01,", // valid
+      ",,,,,,,,,,,", // invalid (empty fields)
+      "Prop,PROPERTY,House,PROP-1,1,350000,350000,GBP,MORTGAGE,2024-01-01,", // skipped (no params)
+      "GIA,GIA,Asset2,SYM2,abc,100,1000,GBP,EQUITY,2024-01-01,", // error (non-numeric units)
+      "GIA,GIA,Asset3,SYM3,20,200,4000,USD,EQUITY,2024-06-01,", // valid
     ]);
 
     const result = parsePortfolioCsv(csv);
@@ -713,7 +773,7 @@ describe("parsePortfolioCsv", () => {
   });
 
   it("collects multiple errors on the same row", () => {
-    const csv = buildSimpleCsv([",,,,,,,,,"]);
+    const csv = buildSimpleCsv([",,,,,,,,,,"]);
     const result = parsePortfolioCsv(csv);
     // Missing: Account, Asset Name, Symbol, Units, Currency = at least 5 errors
     expect(result.errors.length).toBeGreaterThanOrEqual(5);
@@ -723,7 +783,7 @@ describe("parsePortfolioCsv", () => {
 
   it("continues parsing after encountering errors", () => {
     const csv = buildSimpleCsv([
-      "ISA,ISA,Bad,SYM,abc,100,1000,GBP,ETF,2024-01-01",  // error
+      "ISA,ISA,Bad,SYM,abc,100,1000,GBP,ETF,2024-01-01", // error
       "ISA,ISA,Good,SYM2,10,100,1000,GBP,ETF,2024-01-01", // valid
     ]);
 
@@ -773,9 +833,42 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("groups positions by account name", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
-      { accountName: "ISA", accountType: "ISA", assetName: "B", symbol: "S2", units: 20, price: 200, totalValue: 4000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
-      { accountName: "GIA", accountType: "GIA", assetName: "C", symbol: "S3", units: 30, price: 300, totalValue: 9000, currency: "USD", assetType: "EQUITY", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "B",
+        symbol: "S2",
+        units: 20,
+        price: 200,
+        totalValue: 4000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
+      {
+        accountName: "GIA",
+        accountType: "GIA",
+        assetName: "C",
+        symbol: "S3",
+        units: 30,
+        price: 300,
+        totalValue: 9000,
+        currency: "USD",
+        assetType: "EQUITY",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -795,8 +888,30 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("generates unique UUIDs for accounts and positions", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
-      { accountName: "ISA", accountType: "ISA", assetName: "B", symbol: "S2", units: 20, price: 200, totalValue: 4000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "B",
+        symbol: "S2",
+        units: 20,
+        price: 200,
+        totalValue: 4000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -812,7 +927,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("sets priceOverride when price > 0", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 99.5, totalValue: 995, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 99.5,
+        totalValue: 995,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -821,7 +947,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("does not set priceOverride when price is 0", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 0, totalValue: 0, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 0,
+        totalValue: 0,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -830,7 +967,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("maps account type correctly", () => {
     const rows: CsvRow[] = [
-      { accountName: "My SIPP", accountType: "SIPP", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "My SIPP",
+        accountType: "SIPP",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -839,7 +987,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("maps asset type correctly", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "MUTUALFUND", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "MUTUALFUND",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -848,7 +1007,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("defaults unknown account type to OTHER", () => {
     const rows: CsvRow[] = [
-      { accountName: "Custom", accountType: "WEIRD", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "Custom",
+        accountType: "WEIRD",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -857,7 +1027,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("defaults unknown asset type to UNKNOWN", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "WEIRD", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "WEIRD",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -866,7 +1047,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("includes a summary message", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -877,8 +1069,30 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("pluralises correctly for multiple items", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-01-01" },
-      { accountName: "GIA", accountType: "GIA", assetName: "B", symbol: "S2", units: 20, price: 200, totalValue: 4000, currency: "USD", assetType: "EQUITY", lastUpdated: "2024-01-01" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
+      {
+        accountName: "GIA",
+        accountType: "GIA",
+        assetName: "B",
+        symbol: "S2",
+        units: 20,
+        price: 200,
+        totalValue: 4000,
+        currency: "USD",
+        assetType: "EQUITY",
+        lastUpdated: "2024-01-01",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -888,7 +1102,18 @@ describe("buildPortfolioFromCsvRows", () => {
 
   it("sets addedAt from lastUpdated", () => {
     const rows: CsvRow[] = [
-      { accountName: "ISA", accountType: "ISA", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "GBP", assetType: "ETF", lastUpdated: "2024-07-15T09:30:00.000Z" },
+      {
+        accountName: "ISA",
+        accountType: "ISA",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "GBP",
+        assetType: "ETF",
+        lastUpdated: "2024-07-15T09:30:00.000Z",
+      },
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
@@ -912,15 +1137,11 @@ describe("mergePortfolios", () => {
 
   it("appends positions to matching account (same name and type)", () => {
     const existing = makePortfolio([
-      makeAccount({ id: "a1", name: "ISA", type: AccountType.ISA }, [
-        makePosition({ id: "p1", symbol: "VUSA.L" }),
-      ]),
+      makeAccount({ id: "a1", name: "ISA", type: AccountType.ISA }, [makePosition({ id: "p1", symbol: "VUSA.L" })]),
     ]);
 
     const imported = makePortfolio([
-      makeAccount({ id: "a2", name: "ISA", type: AccountType.ISA }, [
-        makePosition({ id: "p2", symbol: "AAPL" }),
-      ]),
+      makeAccount({ id: "a2", name: "ISA", type: AccountType.ISA }, [makePosition({ id: "p2", symbol: "AAPL" })]),
     ]);
 
     const merged = mergePortfolios(existing, imported);
@@ -983,24 +1204,16 @@ describe("mergePortfolios", () => {
 
 describe("findDuplicates", () => {
   it("returns empty array when no duplicates", () => {
-    const existing = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "AAPL" })]),
-    ]);
+    const existing = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "AAPL" })])]);
 
     const dupes = findDuplicates(existing, imported);
     expect(dupes).toHaveLength(0);
   });
 
   it("detects duplicate symbols in matching accounts", () => {
-    const existing = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
+    const existing = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
 
     const dupes = findDuplicates(existing, imported);
     expect(dupes).toHaveLength(1);
@@ -1010,21 +1223,15 @@ describe("findDuplicates", () => {
   });
 
   it("is case-insensitive for symbol matching", () => {
-    const existing = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "vusa.l" })]),
-    ]);
+    const existing = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "vusa.l" })])]);
 
     const dupes = findDuplicates(existing, imported);
     expect(dupes).toHaveLength(1);
   });
 
   it("does not flag duplicates across different accounts", () => {
-    const existing = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
+    const existing = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
     const imported = makePortfolio([
       makeAccount({ name: "GIA", type: AccountType.GIA }, [makePosition({ symbol: "VUSA.L" })]),
     ]);
@@ -1040,9 +1247,7 @@ describe("findDuplicates", () => {
         makePosition({ id: "p2", symbol: "VUSA.L" }), // duplicate in existing
       ]),
     ]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
 
     const dupes = findDuplicates(existing, imported);
     expect(dupes).toHaveLength(1);
@@ -1051,9 +1256,7 @@ describe("findDuplicates", () => {
 
   it("returns empty when existing portfolio has no accounts", () => {
     const existing = makePortfolio([]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
 
     const dupes = findDuplicates(existing, imported);
     expect(dupes).toHaveLength(0);
@@ -1088,11 +1291,31 @@ describe("round-trip: export → import", () => {
   it("exports and re-imports a simple portfolio correctly", () => {
     const portfolio = makePortfolio([
       makeAccount({ name: "ISA", type: AccountType.ISA }, [
-        makePosition({ symbol: "VUSA.L", name: "Vanguard S&P 500", units: 50, currency: "GBP", assetType: AssetType.ETF }),
-        makePosition({ id: "p2", symbol: "VWRL.L", name: "Vanguard All-World", units: 100, currency: "GBP", assetType: AssetType.ETF }),
+        makePosition({
+          symbol: "VUSA.L",
+          name: "Vanguard S&P 500",
+          units: 50,
+          currency: "GBP",
+          assetType: AssetType.ETF,
+        }),
+        makePosition({
+          id: "p2",
+          symbol: "VWRL.L",
+          name: "Vanguard All-World",
+          units: 100,
+          currency: "GBP",
+          assetType: AssetType.ETF,
+        }),
       ]),
       makeAccount({ id: "a2", name: "Brokerage", type: AccountType.BROKERAGE }, [
-        makePosition({ id: "p3", symbol: "AAPL", name: "Apple Inc.", units: 10, currency: "USD", assetType: AssetType.EQUITY }),
+        makePosition({
+          id: "p3",
+          symbol: "AAPL",
+          name: "Apple Inc.",
+          units: 10,
+          currency: "USD",
+          assetType: AssetType.EQUITY,
+        }),
       ]),
     ]);
 
@@ -1153,9 +1376,7 @@ describe("round-trip: export → import", () => {
 
   it("skips property and debt positions on re-import", () => {
     const portfolio = makePortfolio([
-      makeAccount({ name: "ISA" }, [
-        makePosition({ symbol: "VUSA.L", assetType: AssetType.ETF }),
-      ]),
+      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L", assetType: AssetType.ETF })]),
       makeAccount({ id: "a2", name: "Property", type: AccountType.PROPERTY }, [
         makePosition({ id: "p2", symbol: "PROP-1", name: "House", assetType: AssetType.MORTGAGE, units: 1 }),
       ]),
@@ -1217,7 +1438,18 @@ describe("CSV edge cases", () => {
 
   it("handles 401K account type", () => {
     const rows: CsvRow[] = [
-      { accountName: "My 401K", accountType: "401K", assetName: "A", symbol: "S1", units: 10, price: 100, totalValue: 1000, currency: "USD", assetType: "ETF", lastUpdated: "2024-01-01" },
+      {
+        accountName: "My 401K",
+        accountType: "401K",
+        assetName: "A",
+        symbol: "S1",
+        units: 10,
+        price: 100,
+        totalValue: 1000,
+        currency: "USD",
+        assetType: "ETF",
+        lastUpdated: "2024-01-01",
+      },
     ];
     const result = buildPortfolioFromCsvRows(rows);
     expect(result.portfolio.accounts[0].type).toBe(AccountType._401K);
@@ -1225,7 +1457,18 @@ describe("CSV edge cases", () => {
 
   it("handles CURRENT ACCOUNT and SAVINGS ACCOUNT types (with space)", () => {
     const rows: CsvRow[] = [
-      { accountName: "Current", accountType: "CURRENT ACCOUNT", assetName: "Cash", symbol: "CASH", units: 5000, price: 1, totalValue: 5000, currency: "GBP", assetType: "CASH", lastUpdated: "2024-01-01" },
+      {
+        accountName: "Current",
+        accountType: "CURRENT ACCOUNT",
+        assetName: "Cash",
+        symbol: "CASH",
+        units: 5000,
+        price: 1,
+        totalValue: 5000,
+        currency: "GBP",
+        assetType: "CASH",
+        lastUpdated: "2024-01-01",
+      },
     ];
     const result = buildPortfolioFromCsvRows(rows);
     expect(result.portfolio.accounts[0].type).toBe(AccountType.CURRENT_ACCOUNT);
@@ -1252,9 +1495,7 @@ describe("CSV edge cases", () => {
   });
 
   it("export handles empty account name gracefully", () => {
-    const data: ExportPositionData[] = [
-      makeExportData({ accountName: "" }),
-    ];
+    const data: ExportPositionData[] = [makeExportData({ accountName: "" })];
     const csv = exportPortfolioToCsv(data);
     // Should not crash
     expect(csv).toBeTruthy();
@@ -1263,9 +1504,7 @@ describe("CSV edge cases", () => {
 
   it("merging into empty portfolio works", () => {
     const existing = makePortfolio([]);
-    const imported = makePortfolio([
-      makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })]),
-    ]);
+    const imported = makePortfolio([makeAccount({ name: "ISA" }, [makePosition({ symbol: "VUSA.L" })])]);
 
     const merged = mergePortfolios(existing, imported);
     expect(merged.accounts).toHaveLength(1);
@@ -1273,9 +1512,7 @@ describe("CSV edge cases", () => {
   });
 
   it("merging with empty import preserves existing", () => {
-    const existing = makePortfolio([
-      makeAccount({ id: "a1", name: "ISA" }, [makePosition()]),
-    ]);
+    const existing = makePortfolio([makeAccount({ id: "a1", name: "ISA" }, [makePosition()])]);
     const imported = makePortfolio([]);
 
     const merged = mergePortfolios(existing, imported);
@@ -1312,7 +1549,309 @@ describe("CSV edge cases", () => {
     expect(result.rows[0].symbol).toBe("FUND.L");
   });
 
-  it("CSV_HEADERS has exactly 10 entries", () => {
-    expect(CSV_HEADERS).toHaveLength(10);
+  it("CSV_HEADERS has exactly 11 entries", () => {
+    expect(CSV_HEADERS).toHaveLength(11);
+  });
+});
+
+// ──────────────────────────────────────────
+// buildAdditionalParameters
+// ──────────────────────────────────────────
+
+describe("buildAdditionalParameters", () => {
+  it("returns empty string for standard positions", () => {
+    const pos = makePosition();
+    expect(buildAdditionalParameters(pos)).toBe("");
+  });
+
+  it("serialises mortgageData as JSON", () => {
+    const pos = makePosition({
+      assetType: AssetType.MORTGAGE,
+      mortgageData: {
+        totalPropertyValue: 350000,
+        equity: 100000,
+        valuationDate: "2023-06-15",
+        postcode: "SW1A 1AA",
+        mortgageRate: 4.5,
+        mortgageTerm: 25,
+        mortgageStartDate: "2020-01-15",
+      },
+    });
+    const json = buildAdditionalParameters(pos);
+    expect(json).toBeTruthy();
+    const parsed = JSON.parse(json);
+    expect(parsed.totalPropertyValue).toBe(350000);
+    expect(parsed.equity).toBe(100000);
+    expect(parsed.postcode).toBe("SW1A 1AA");
+    expect(parsed.mortgageRate).toBe(4.5);
+    expect(parsed.mortgageTerm).toBe(25);
+    expect(parsed.mortgageStartDate).toBe("2020-01-15");
+    expect(parsed.valuationDate).toBe("2023-06-15");
+  });
+
+  it("strips undefined optional mortgage fields", () => {
+    const pos = makePosition({
+      assetType: AssetType.MORTGAGE,
+      mortgageData: {
+        totalPropertyValue: 350000,
+        equity: 100000,
+        valuationDate: "2023-06-15",
+        postcode: "SW1A 1AA",
+      },
+    });
+    const json = buildAdditionalParameters(pos);
+    const parsed = JSON.parse(json);
+    expect(parsed).not.toHaveProperty("mortgageRate");
+    expect(parsed).not.toHaveProperty("mortgageTerm");
+    expect(parsed).not.toHaveProperty("mortgageStartDate");
+    expect(parsed).not.toHaveProperty("sharedOwnershipPercent");
+    expect(parsed).not.toHaveProperty("myEquityShare");
+  });
+
+  it("serialises debtData as JSON", () => {
+    const pos = makePosition({
+      assetType: AssetType.CREDIT_CARD,
+      debtData: {
+        currentBalance: 5000,
+        apr: 19.9,
+        repaymentDayOfMonth: 15,
+        monthlyRepayment: 300,
+        enteredAt: "2025-01-01T00:00:00Z",
+        paidOff: false,
+      },
+    });
+    const json = buildAdditionalParameters(pos);
+    expect(json).toBeTruthy();
+    const parsed = JSON.parse(json);
+    expect(parsed.currentBalance).toBe(5000);
+    expect(parsed.apr).toBe(19.9);
+    expect(parsed.repaymentDayOfMonth).toBe(15);
+    expect(parsed.monthlyRepayment).toBe(300);
+    expect(parsed.enteredAt).toBe("2025-01-01T00:00:00Z");
+    expect(parsed.paidOff).toBe(false);
+  });
+
+  it("strips undefined optional debt fields", () => {
+    const pos = makePosition({
+      assetType: AssetType.LOAN,
+      debtData: {
+        currentBalance: 10000,
+        apr: 5,
+        repaymentDayOfMonth: 1,
+        monthlyRepayment: 200,
+        enteredAt: "2025-01-01T00:00:00Z",
+      },
+    });
+    const json = buildAdditionalParameters(pos);
+    const parsed = JSON.parse(json);
+    expect(parsed).not.toHaveProperty("loanStartDate");
+    expect(parsed).not.toHaveProperty("loanEndDate");
+    expect(parsed).not.toHaveProperty("totalTermMonths");
+    expect(parsed).not.toHaveProperty("paidOff");
+    expect(parsed).not.toHaveProperty("archived");
+  });
+
+  it("includes shared ownership fields when set", () => {
+    const pos = makePosition({
+      assetType: AssetType.MORTGAGE,
+      mortgageData: {
+        totalPropertyValue: 470000,
+        equity: 47000,
+        valuationDate: "2023-01-01",
+        postcode: "E1 6AN",
+        sharedOwnershipPercent: 60,
+        myEquityShare: 40000,
+      },
+    });
+    const json = buildAdditionalParameters(pos);
+    const parsed = JSON.parse(json);
+    expect(parsed.sharedOwnershipPercent).toBe(60);
+    expect(parsed.myEquityShare).toBe(40000);
+  });
+});
+
+// ──────────────────────────────────────────
+// parseAdditionalParameters
+// ──────────────────────────────────────────
+
+describe("parseAdditionalParameters", () => {
+  it("returns empty object for empty string", () => {
+    const result = parseAdditionalParameters("", AssetType.MORTGAGE);
+    expect(result.mortgageData).toBeUndefined();
+    expect(result.debtData).toBeUndefined();
+  });
+
+  it("returns empty object for undefined", () => {
+    const result = parseAdditionalParameters(undefined, AssetType.MORTGAGE);
+    expect(result.mortgageData).toBeUndefined();
+  });
+
+  it("returns empty object for invalid JSON", () => {
+    const result = parseAdditionalParameters("{bad json", AssetType.MORTGAGE);
+    expect(result.mortgageData).toBeUndefined();
+  });
+
+  it("returns empty object for non-specialised asset types", () => {
+    const json = JSON.stringify({ someField: 123 });
+    const result = parseAdditionalParameters(json, AssetType.ETF);
+    expect(result.mortgageData).toBeUndefined();
+    expect(result.debtData).toBeUndefined();
+  });
+
+  it("parses mortgageData for MORTGAGE type", () => {
+    const json = JSON.stringify({
+      totalPropertyValue: 350000,
+      equity: 100000,
+      valuationDate: "2023-06-15",
+      postcode: "SW1A 1AA",
+      mortgageRate: 4.5,
+      mortgageTerm: 25,
+      mortgageStartDate: "2020-01-15",
+    });
+    const result = parseAdditionalParameters(json, AssetType.MORTGAGE);
+    expect(result.mortgageData).toBeDefined();
+    expect(result.mortgageData!.totalPropertyValue).toBe(350000);
+    expect(result.mortgageData!.equity).toBe(100000);
+    expect(result.mortgageData!.postcode).toBe("SW1A 1AA");
+    expect(result.mortgageData!.mortgageRate).toBe(4.5);
+    expect(result.mortgageData!.mortgageTerm).toBe(25);
+    expect(result.mortgageData!.mortgageStartDate).toBe("2020-01-15");
+    expect(result.debtData).toBeUndefined();
+  });
+
+  it("parses mortgageData for OWNED_PROPERTY type", () => {
+    const json = JSON.stringify({
+      totalPropertyValue: 250000,
+      equity: 250000,
+      valuationDate: "2024-01-01",
+      postcode: "M1 1AA",
+    });
+    const result = parseAdditionalParameters(json, AssetType.OWNED_PROPERTY);
+    expect(result.mortgageData).toBeDefined();
+    expect(result.mortgageData!.totalPropertyValue).toBe(250000);
+    expect(result.mortgageData!.equity).toBe(250000);
+  });
+
+  it("parses debtData for CREDIT_CARD type", () => {
+    const json = JSON.stringify({
+      currentBalance: 5000,
+      apr: 19.9,
+      repaymentDayOfMonth: 15,
+      monthlyRepayment: 300,
+      enteredAt: "2025-01-01T00:00:00Z",
+    });
+    const result = parseAdditionalParameters(json, AssetType.CREDIT_CARD);
+    expect(result.debtData).toBeDefined();
+    expect(result.debtData!.currentBalance).toBe(5000);
+    expect(result.debtData!.apr).toBe(19.9);
+    expect(result.debtData!.repaymentDayOfMonth).toBe(15);
+    expect(result.debtData!.monthlyRepayment).toBe(300);
+    expect(result.mortgageData).toBeUndefined();
+  });
+
+  it("parses debtData for LOAN type with loan dates", () => {
+    const json = JSON.stringify({
+      currentBalance: 10000,
+      apr: 5,
+      repaymentDayOfMonth: 1,
+      monthlyRepayment: 200,
+      enteredAt: "2023-01-01T00:00:00Z",
+      loanStartDate: "2023-01-01",
+      loanEndDate: "2028-01-01",
+      totalTermMonths: 60,
+    });
+    const result = parseAdditionalParameters(json, AssetType.LOAN);
+    expect(result.debtData).toBeDefined();
+    expect(result.debtData!.loanStartDate).toBe("2023-01-01");
+    expect(result.debtData!.loanEndDate).toBe("2028-01-01");
+    expect(result.debtData!.totalTermMonths).toBe(60);
+  });
+
+  it("parses paid-off and archived flags for debt", () => {
+    const json = JSON.stringify({
+      currentBalance: 0,
+      apr: 0,
+      repaymentDayOfMonth: 1,
+      monthlyRepayment: 0,
+      enteredAt: "2024-01-01T00:00:00Z",
+      paidOff: true,
+      archived: true,
+    });
+    const result = parseAdditionalParameters(json, AssetType.STUDENT_LOAN);
+    expect(result.debtData).toBeDefined();
+    expect(result.debtData!.paidOff).toBe(true);
+    expect(result.debtData!.archived).toBe(true);
+  });
+
+  it("handles shared ownership mortgage fields", () => {
+    const json = JSON.stringify({
+      totalPropertyValue: 470000,
+      equity: 47000,
+      valuationDate: "2023-01-01",
+      postcode: "E1 6AN",
+      sharedOwnershipPercent: 60,
+      myEquityShare: 40000,
+    });
+    const result = parseAdditionalParameters(json, AssetType.MORTGAGE);
+    expect(result.mortgageData).toBeDefined();
+    expect(result.mortgageData!.sharedOwnershipPercent).toBe(60);
+    expect(result.mortgageData!.myEquityShare).toBe(40000);
+  });
+
+  it("round-trips mortgageData through buildAdditionalParameters → parseAdditionalParameters", () => {
+    const mortgageData: MortgageData = {
+      totalPropertyValue: 470000,
+      equity: 47000,
+      valuationDate: "2023-01-01",
+      postcode: "E1 6AN",
+      mortgageRate: 4.5,
+      mortgageTerm: 25,
+      mortgageStartDate: "2020-01-15",
+      sharedOwnershipPercent: 60,
+      myEquityShare: 40000,
+    };
+    const pos = makePosition({ assetType: AssetType.MORTGAGE, mortgageData });
+    const json = buildAdditionalParameters(pos);
+    const result = parseAdditionalParameters(json, AssetType.MORTGAGE);
+
+    expect(result.mortgageData).toBeDefined();
+    expect(result.mortgageData!.totalPropertyValue).toBe(470000);
+    expect(result.mortgageData!.equity).toBe(47000);
+    expect(result.mortgageData!.postcode).toBe("E1 6AN");
+    expect(result.mortgageData!.mortgageRate).toBe(4.5);
+    expect(result.mortgageData!.mortgageTerm).toBe(25);
+    expect(result.mortgageData!.mortgageStartDate).toBe("2020-01-15");
+    expect(result.mortgageData!.sharedOwnershipPercent).toBe(60);
+    expect(result.mortgageData!.myEquityShare).toBe(40000);
+  });
+
+  it("round-trips debtData through buildAdditionalParameters → parseAdditionalParameters", () => {
+    const debtData: DebtData = {
+      currentBalance: 5000,
+      apr: 19.9,
+      repaymentDayOfMonth: 15,
+      monthlyRepayment: 300,
+      enteredAt: "2025-01-01T00:00:00Z",
+      loanStartDate: "2024-06-01",
+      loanEndDate: "2026-06-01",
+      totalTermMonths: 24,
+      paidOff: false,
+      archived: false,
+    };
+    const pos = makePosition({ assetType: AssetType.CREDIT_CARD, debtData });
+    const json = buildAdditionalParameters(pos);
+    const result = parseAdditionalParameters(json, AssetType.CREDIT_CARD);
+
+    expect(result.debtData).toBeDefined();
+    expect(result.debtData!.currentBalance).toBe(5000);
+    expect(result.debtData!.apr).toBe(19.9);
+    expect(result.debtData!.repaymentDayOfMonth).toBe(15);
+    expect(result.debtData!.monthlyRepayment).toBe(300);
+    expect(result.debtData!.enteredAt).toBe("2025-01-01T00:00:00Z");
+    expect(result.debtData!.loanStartDate).toBe("2024-06-01");
+    expect(result.debtData!.loanEndDate).toBe("2026-06-01");
+    expect(result.debtData!.totalTermMonths).toBe(24);
+    expect(result.debtData!.paidOff).toBe(false);
+    expect(result.debtData!.archived).toBe(false);
   });
 });

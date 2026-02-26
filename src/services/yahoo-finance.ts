@@ -114,7 +114,7 @@ export async function getQuote(symbol: string): Promise<AssetQuote> {
     price: normalised.price,
     currency: normalised.currency,
     change: normalisedChange.price,
-    changePercent: q.regularMarketChangePercent ?? 0,
+    changePercent: (q.regularMarketChangePercent ?? 0) * 100,
     marketState: q.marketState ?? "CLOSED",
   };
 }

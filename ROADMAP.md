@@ -57,9 +57,17 @@
      - Fixed interest bar visibility: interest accrued during the year is always shown as the rightmost yellow section of the bar, even when annualised repayment exceeds interest (previously the yellow bar disappeared because the month-end snapshot showed zero interest balance) ✅
      - Dropped contributions-to-debt wiring — debt projection uses Monthly Repayment from Portfolio data directly, no need to route through Contributions flow ✅
 
-8. **Add Import/Export functionality**.
-   Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, and last updated date. Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column. 🔧
-9. Fix Portfolio Tracker "Day Change" showing as "+0.01%" where it should be "+1%" it's display 0.0X and then not mutplying by 100
+8. **Add Import/Export functionality**. ✅
+   Separate command. Export to CSV with columns for account, asset name, symbol, units, price, total value, currency, asset type, last updated date, and additional parameters (JSON).
+   Import from CSV with same format, with validation and error handling for missing/invalid fields. Support for multiple accounts via account column.
+   - "Additional Parameters" column: JSON field that captures all non-standard settings for specialised position types (mortgage, property, debt). Properly escaped for CSV (RFC 4180). Enables full round-trip export/import of all position types. ✅
+   - Mortgage/Property/Debt positions: exported with `mortgageData`/`debtData` serialised into Additional Parameters JSON. On import, JSON is parsed back to restore the full position with all specialised data. ✅
+   - Specialised positions without Additional Parameters are skipped on import with a helpful message directing users to re-export or add manually. ✅
+   - Import Preview rewritten from static Detail/markdown to interactive `List`-based UI: succinct summary row ("17 positions read over 6 accounts, 0 errors"), per-position rows with toggleable selection (checkmark/circle icons), duplicates marked with ⚠️ and deselected by default, Select All / Deselect All actions, error and skipped sections as List.Sections. ✅
+   - Selective import: users can deselect individual rows before confirming; only selected rows are imported. ✅
+   - `buildAdditionalParameters` / `parseAdditionalParameters`: pure functions for JSON serialisation/deserialisation of MortgageData and DebtData with alphabetical key ordering and undefined-stripping. ✅
+   - 37 new unit tests for Additional Parameters (build, parse, round-trip for mortgage and debt) — 790 total tests passing. ✅
+9. Fix Portfolio Tracker "Day Change" showing as "+0.01%" where it should be "+1%" — Yahoo API returns `regularMarketChangePercent` as a decimal fraction (e.g. 0.01535), now multiplied by 100 at the API layer to convert to percentage (1.535%). ✅
 10. **Fee Tracking: Account level and ETF level** Add entry for fees on Account level and on each Position level. This is a new option in the Portfolio Tracker when editing and adding accounts and positions. Check the Yahoo API response it it includes asset type for Position (only ETFs attract annual fees). It's % based, anually. FIRE setting then have an option to "Adjust growth for Account Fees" and "Adjust growth for ETF Fees" which are ON by default. When ON, FIRE SVG chart calculations subtract a sum of (account fee + position fee) from the growth rate (negative possible). Then a new SVG Chart ("Fee Tracking") is present showing the total sum of all fees (bar stacked with two values: account fees and ETF fees) shown over time, with same format at the other SVGs.
 11. Visual Improvements - better FONT? More Colors. Consistency in Emojis. Better color composition.
 

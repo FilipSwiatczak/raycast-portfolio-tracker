@@ -166,7 +166,9 @@ function buildMarkdown({
   lines.push(`| HPI Change | ${sign(hpiChangePercent)} **${pct(hpiChangePercent)}** |`);
   lines.push(`| Current Estimate | **${f(calc.currentPropertyValue)}** |`);
   lines.push(``);
-  lines.push(`> *${f(md.totalPropertyValue)} × (1 + ${(hpiChangePercent / 100).toFixed(4)}) = ${f(calc.currentPropertyValue)}*`);
+  lines.push(
+    `> *${f(md.totalPropertyValue)} × (1 + ${(hpiChangePercent / 100).toFixed(4)}) = ${f(calc.currentPropertyValue)}*`,
+  );
   lines.push(``);
 
   // ── Step 2: Mortgage ──
@@ -186,7 +188,9 @@ function buildMarkdown({
 
     if (piRatio) {
       lines.push(``);
-      lines.push(`Monthly payment: **${f(piRatio.monthlyPayment)}** (${piRatio.principalPercent.toFixed(0)}% principal · ${piRatio.interestPercent.toFixed(0)}% interest)`);
+      lines.push(
+        `Monthly payment: **${f(piRatio.monthlyPayment)}** (${piRatio.principalPercent.toFixed(0)}% principal · ${piRatio.interestPercent.toFixed(0)}% interest)`,
+      );
     }
 
     if (md.mortgageRate !== undefined && md.mortgageTerm !== undefined) {
@@ -212,7 +216,9 @@ function buildMarkdown({
   lines.push(`| HPI Change | ${pct(hpiChangePercent)} |`);
   lines.push(`| Market Impact | ${changeEmoji(calc.appreciation)} **${f(calc.appreciation, { showSign: true })}** |`);
   lines.push(``);
-  lines.push(`> *${f(md.totalPropertyValue)} × ${(hpiChangePercent / 100).toFixed(4)} = ${f(calc.appreciation, { showSign: true })}*`);
+  lines.push(
+    `> *${f(md.totalPropertyValue)} × ${(hpiChangePercent / 100).toFixed(4)} = ${f(calc.appreciation, { showSign: true })}*`,
+  );
   lines.push(``);
 
   // ── Step 4: Net Change ──
@@ -230,7 +236,9 @@ function buildMarkdown({
   lines.push(`| **Net Change** | ${changeEmoji(calc.netChange)} **${f(calc.netChange, { showSign: true })}** |`);
   lines.push(``);
   if (hasRepaymentData) {
-    lines.push(`> *${f(calc.principalRepaid)} + (${f(calc.appreciation, { showSign: true })}) = ${f(calc.netChange, { showSign: true })}*`);
+    lines.push(
+      `> *${f(calc.principalRepaid)} + (${f(calc.appreciation, { showSign: true })}) = ${f(calc.netChange, { showSign: true })}*`,
+    );
   }
   lines.push(``);
 
@@ -246,7 +254,9 @@ function buildMarkdown({
   lines.push(``);
   lines.push(`> *${f(md.equity)} + (${f(calc.netChange, { showSign: true })}) = ${f(calc.currentEquity)}*`);
   lines.push(``);
-  lines.push(`*Or equivalently: ${f(calc.currentPropertyValue)} − ${f(calc.outstandingBalance)} = ${f(calc.currentEquity)}*`);
+  lines.push(
+    `*Or equivalently: ${f(calc.currentPropertyValue)} − ${f(calc.outstandingBalance)} = ${f(calc.currentEquity)}*`,
+  );
   lines.push(``);
 
   // ── Step 6: Shared Ownership ──
@@ -265,9 +275,13 @@ function buildMarkdown({
       lines.push(`| My Share of Deposit | **${f(calc.myEquityShare)}** |`);
       lines.push(`| Net Change | ${f(calc.netChange, { showSign: true })} |`);
       lines.push(`| Ownership Share | ${calc.sharedOwnershipPercent}% |`);
-      lines.push(`| My Share of Change | ${changeEmoji(myShareOfChange)} **${f(myShareOfChange, { showSign: true })}** |`);
+      lines.push(
+        `| My Share of Change | ${changeEmoji(myShareOfChange)} **${f(myShareOfChange, { showSign: true })}** |`,
+      );
       lines.push(``);
-      lines.push(`> *${f(calc.netChange, { showSign: true })} × ${calc.sharedOwnershipPercent}% = ${f(myShareOfChange, { showSign: true })}*`);
+      lines.push(
+        `> *${f(calc.netChange, { showSign: true })} × ${calc.sharedOwnershipPercent}% = ${f(myShareOfChange, { showSign: true })}*`,
+      );
     } else {
       lines.push(`The ownership ratio applies to the full equity.`);
       lines.push(``);
@@ -295,7 +309,9 @@ function buildMarkdown({
     lines.push(`| + My Share of Change | ${f(myShareOfChange, { showSign: true })} |`);
     lines.push(`| **= My Equity** | **${f(calc.adjustedEquity)}** |`);
     lines.push(``);
-    lines.push(`> *${f(calc.myEquityShare)} + ${f(myShareOfChange, { showSign: true })} = **${f(calc.adjustedEquity)}***`);
+    lines.push(
+      `> *${f(calc.myEquityShare)} + ${f(myShareOfChange, { showSign: true })} = **${f(calc.adjustedEquity)}***`,
+    );
   } else if (hasSharedOwnership) {
     lines.push(`| | |`);
     lines.push(`|---|---|`);
@@ -317,7 +333,9 @@ function buildMarkdown({
   const equityChange = finalEquity - baseEquity;
   const equityChangePct = baseEquity > 0 ? (equityChange / baseEquity) * 100 : 0;
 
-  lines.push(`${changeEmoji(equityChange)} **Equity change: ${f(equityChange, { showSign: true })} (${pct(equityChangePct)})** since valuation`);
+  lines.push(
+    `${changeEmoji(equityChange)} **Equity change: ${f(equityChange, { showSign: true })} (${pct(equityChangePct)})** since valuation`,
+  );
   lines.push(``);
 
   // ── Formula Summary ──

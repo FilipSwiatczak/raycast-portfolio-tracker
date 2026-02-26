@@ -856,11 +856,11 @@ describe("getQuote — normalisation edge cases", () => {
     expect(quote.change).toBeCloseTo(0.45, 2);
   });
 
-  it("preserves changePercent as-is (not affected by normalisation)", async () => {
+  it("converts changePercent from decimal to percentage (not affected by currency normalisation)", async () => {
     const quote = await getQuote("VUSA.L");
 
-    // changePercent is already a ratio, not in pence
-    expect(quote.changePercent).toBeCloseTo(0.00259, 4);
+    // Yahoo returns 0.00259 (decimal ratio) → we multiply by 100 → 0.259%
+    expect(quote.changePercent).toBeCloseTo(0.259, 2);
   });
 
   it("preserves negative change values through normalisation", async () => {

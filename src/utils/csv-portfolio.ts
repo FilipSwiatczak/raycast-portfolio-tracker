@@ -4,7 +4,7 @@
  * Provides pure functions to:
  *   - **Export** a Portfolio to a CSV string with columns for account,
  *     asset name, symbol, units, price, total value, currency, asset type,
- *     and last updated date.
+ *     last updated date, and additional parameters (JSON).
  *   - **Parse** a CSV string back into validated rows, collecting errors
  *     for any rows with missing or invalid fields.
  *   - **Build** a Portfolio object from parsed CSV rows, grouping positions
@@ -18,19 +18,19 @@
  *
  * Supported columns:
  *   Account, Account Type, Asset Name, Symbol, Units, Price, Total Value,
- *   Currency, Asset Type, Last Updated
+ *   Currency, Asset Type, Last Updated, Additional Parameters
  *
- * Special position types (property, debt) are exported for reference but
- * import currently handles standard positions only (EQUITY, ETF, MUTUALFUND,
- * INDEX, CURRENCY, CRYPTOCURRENCY, OPTION, FUTURE, CASH, UNKNOWN).
- * Property and debt rows are skipped on import with a warning.
+ * The "Additional Parameters" column contains a JSON object with non-standard
+ * settings for specialised position types (mortgage, property, debt). This
+ * allows full round-trip export/import of all position types. The JSON is
+ * properly escaped for CSV (RFC 4180).
  *
  * Zero side effects, zero Raycast imports. Fully testable.
  *
  * @module csv-portfolio
  */
 
-import { Portfolio, Account, Position, AccountType, AssetType } from "./types";
+import { Portfolio, Account, Position, AccountType, AssetType, MortgageData, DebtData } from "./types";
 import { generateId } from "./uuid";
 
 // ──────────────────────────────────────────
@@ -49,6 +49,7 @@ export const CSV_HEADERS = [
   "Currency",
   "Asset Type",
   "Last Updated",
+  "Additional Parameters",
 ] as const;
 
 export type CsvHeader = (typeof CSV_HEADERS)[number];
@@ -79,6 +80,8 @@ export interface CsvRow {
   assetType: string;
   /** ISO date string of last update */
   lastUpdated: string;
+  /** JSON string of additional parameters for specialised position types */
+  additionalParameters?: string;
 }
 
 /** A validation error on a specific CSV row */
@@ -181,8 +184,8 @@ for (const [enumVal, csvLabel] of Object.entries(ASSET_TYPE_TO_CSV)) {
   CSV_TO_ASSET_TYPE[csvLabel.toUpperCase()] = enumVal as AssetType;
 }
 
-/** Asset types that cannot be imported (require specialised data) */
-const NON_IMPORTABLE_ASSET_TYPES = new Set<string>([
+/** Asset types that have additional parameters (mortgage/property/debt data) */
+const SPECIALISED_ASSET_TYPES = new Set<string>([
   AssetType.MORTGAGE,
   AssetType.OWNED_PROPERTY,
   AssetType.CREDIT_CARD,
@@ -250,6 +253,9 @@ export function exportPortfolioToCsv(positions: ExportPositionData[]): string {
     const assetTypeLabel = ASSET_TYPE_TO_CSV[position.assetType] ?? position.assetType;
     const accountTypeLabel = ACCOUNT_TYPE_TO_CSV[accountType] ?? accountType;
 
+    // Build additional parameters JSON for specialised position types
+    const additionalParams = buildAdditionalParameters(position);
+
     const row = [
       escapeCsvField(accountName),
       escapeCsvField(accountTypeLabel),
@@ -261,12 +267,153 @@ export function exportPortfolioToCsv(positions: ExportPositionData[]): string {
       escapeCsvField(position.currency),
       escapeCsvField(assetTypeLabel),
       escapeCsvField(position.addedAt),
+      escapeCsvField(additionalParams),
     ];
 
     lines.push(row.join(","));
   }
 
   return lines.join("\n");
+}
+
+// ──────────────────────────────────────────
+// Additional Parameters (JSON serialisation)
+// ──────────────────────────────────────────
+
+/**
+ * Builds a JSON string of additional parameters for specialised position types.
+ *
+ * For MORTGAGE / OWNED_PROPERTY positions, serialises MortgageData fields.
+ * For debt positions (CREDIT_CARD, LOAN, etc.), serialises DebtData fields.
+ * For standard positions, returns an empty string.
+ *
+ * The keys in the JSON are ordered alphabetically for consistency.
+ * Values use dot-notation-friendly keys (camelCase) matching the interface fields.
+ *
+ * @param position - The position to extract additional parameters from
+ * @returns JSON string or empty string if no additional parameters
+ */
+export function buildAdditionalParameters(position: Position): string {
+  if (position.mortgageData) {
+    const md = position.mortgageData;
+    // Build object with consistent key order (alphabetical)
+    const params: Record<string, unknown> = {
+      equity: md.equity,
+      mortgageRate: md.mortgageRate,
+      mortgageStartDate: md.mortgageStartDate,
+      mortgageTerm: md.mortgageTerm,
+      myEquityShare: md.myEquityShare,
+      postcode: md.postcode,
+      sharedOwnershipPercent: md.sharedOwnershipPercent,
+      totalPropertyValue: md.totalPropertyValue,
+      valuationDate: md.valuationDate,
+    };
+    // Strip undefined values for cleaner JSON
+    const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
+    return JSON.stringify(clean);
+  }
+
+  if (position.debtData) {
+    const dd = position.debtData;
+    const params: Record<string, unknown> = {
+      apr: dd.apr,
+      archived: dd.archived,
+      currentBalance: dd.currentBalance,
+      enteredAt: dd.enteredAt,
+      loanEndDate: dd.loanEndDate,
+      loanStartDate: dd.loanStartDate,
+      monthlyRepayment: dd.monthlyRepayment,
+      paidOff: dd.paidOff,
+      repaymentDayOfMonth: dd.repaymentDayOfMonth,
+      totalTermMonths: dd.totalTermMonths,
+    };
+    const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
+    return JSON.stringify(clean);
+  }
+
+  return "";
+}
+
+/**
+ * Parses a JSON string of additional parameters back into MortgageData or DebtData.
+ *
+ * Returns `{ mortgageData, debtData }` — at most one will be set.
+ * Returns empty object if the JSON is empty, invalid, or not applicable.
+ *
+ * @param json - The JSON string from the "Additional Parameters" CSV column
+ * @param assetType - The resolved AssetType to determine which interface to map to
+ * @returns Object with optional mortgageData and/or debtData
+ */
+export function parseAdditionalParameters(
+  json: string | undefined,
+  assetType: AssetType,
+): { mortgageData?: MortgageData; debtData?: DebtData } {
+  if (!json || json.trim().length === 0) return {};
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return {};
+  }
+
+  if (typeof parsed !== "object" || parsed === null) return {};
+
+  // Mortgage / Property positions
+  if (assetType === AssetType.MORTGAGE || assetType === AssetType.OWNED_PROPERTY) {
+    const md: MortgageData = {
+      totalPropertyValue: toNumber(parsed.totalPropertyValue) ?? 0,
+      equity: toNumber(parsed.equity) ?? 0,
+      valuationDate: toString(parsed.valuationDate) ?? new Date().toISOString().split("T")[0],
+      postcode: toString(parsed.postcode) ?? "",
+    };
+    // Optional fields
+    if (parsed.mortgageRate !== undefined) md.mortgageRate = toNumber(parsed.mortgageRate);
+    if (parsed.mortgageTerm !== undefined) md.mortgageTerm = toNumber(parsed.mortgageTerm);
+    if (parsed.mortgageStartDate !== undefined) md.mortgageStartDate = toString(parsed.mortgageStartDate);
+    if (parsed.sharedOwnershipPercent !== undefined)
+      md.sharedOwnershipPercent = toNumber(parsed.sharedOwnershipPercent);
+    if (parsed.myEquityShare !== undefined) md.myEquityShare = toNumber(parsed.myEquityShare);
+
+    return { mortgageData: md };
+  }
+
+  // Debt positions (MORTGAGE and OWNED_PROPERTY already handled above and returned)
+  if (SPECIALISED_ASSET_TYPES.has(assetType)) {
+    const dd: DebtData = {
+      currentBalance: toNumber(parsed.currentBalance) ?? 0,
+      apr: toNumber(parsed.apr) ?? 0,
+      repaymentDayOfMonth: toNumber(parsed.repaymentDayOfMonth) ?? 1,
+      monthlyRepayment: toNumber(parsed.monthlyRepayment) ?? 0,
+      enteredAt: toString(parsed.enteredAt) ?? new Date().toISOString(),
+    };
+    // Optional fields
+    if (parsed.loanStartDate !== undefined) dd.loanStartDate = toString(parsed.loanStartDate);
+    if (parsed.loanEndDate !== undefined) dd.loanEndDate = toString(parsed.loanEndDate);
+    if (parsed.totalTermMonths !== undefined) dd.totalTermMonths = toNumber(parsed.totalTermMonths);
+    if (parsed.paidOff !== undefined) dd.paidOff = parsed.paidOff === true;
+    if (parsed.archived !== undefined) dd.archived = parsed.archived === true;
+
+    return { debtData: dd };
+  }
+
+  return {};
+}
+
+/** Safe number coercion helper */
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && !isNaN(value)) return value;
+  if (typeof value === "string") {
+    const n = parseFloat(value);
+    if (!isNaN(n)) return n;
+  }
+  return undefined;
+}
+
+/** Safe string coercion helper */
+function toString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.length > 0) return value;
+  return undefined;
 }
 
 /**
@@ -421,30 +568,34 @@ export function mapHeaders(headers: string[]): { mapping: Map<CsvHeader, number>
 
   // Aliases for flexible matching
   const aliases: Record<string, CsvHeader> = {
-    "ACCOUNT": "Account",
+    ACCOUNT: "Account",
     "ACCOUNT NAME": "Account",
     "ACCOUNT TYPE": "Account Type",
     "ASSET NAME": "Asset Name",
-    "ASSET": "Asset Name",
-    "NAME": "Asset Name",
-    "SYMBOL": "Symbol",
-    "TICKER": "Symbol",
-    "UNITS": "Units",
-    "QUANTITY": "Units",
-    "SHARES": "Units",
-    "PRICE": "Price",
+    ASSET: "Asset Name",
+    NAME: "Asset Name",
+    SYMBOL: "Symbol",
+    TICKER: "Symbol",
+    UNITS: "Units",
+    QUANTITY: "Units",
+    SHARES: "Units",
+    PRICE: "Price",
     "PRICE PER UNIT": "Price",
     "TOTAL VALUE": "Total Value",
-    "VALUE": "Total Value",
-    "TOTAL": "Total Value",
-    "CURRENCY": "Currency",
-    "CCY": "Currency",
+    VALUE: "Total Value",
+    TOTAL: "Total Value",
+    CURRENCY: "Currency",
+    CCY: "Currency",
     "ASSET TYPE": "Asset Type",
-    "TYPE": "Asset Type",
+    TYPE: "Asset Type",
     "LAST UPDATED": "Last Updated",
-    "UPDATED": "Last Updated",
-    "DATE": "Last Updated",
+    UPDATED: "Last Updated",
+    DATE: "Last Updated",
     "LAST UPDATED DATE": "Last Updated",
+    "ADDITIONAL PARAMETERS": "Additional Parameters",
+    "ADDITIONAL PARAMS": "Additional Parameters",
+    PARAMS: "Additional Parameters",
+    EXTRA: "Additional Parameters",
   };
 
   for (let i = 0; i < normalised.length; i++) {
@@ -490,7 +641,11 @@ export function parsePortfolioCsv(csvContent: string): CsvParseResult {
   const lines = splitCsvLines(csvContent.trim());
 
   if (lines.length < 2) {
-    result.errors.push({ row: 0, column: "File", message: "CSV file must have a header row and at least one data row" });
+    result.errors.push({
+      row: 0,
+      column: "File",
+      message: "CSV file must have a header row and at least one data row",
+    });
     return result;
   }
 
@@ -566,6 +721,7 @@ export function parsePortfolioCsv(csvContent: string): CsvParseResult {
     const totalValueStr = getValue("Total Value");
     const assetTypeStr = getValue("Asset Type") || "UNKNOWN";
     const lastUpdated = getValue("Last Updated") || new Date().toISOString();
+    const additionalParameters = getValue("Additional Parameters") || "";
 
     // Validate optional numeric fields
     const price = priceStr ? parseFloat(priceStr) : 0;
@@ -575,7 +731,12 @@ export function parsePortfolioCsv(csvContent: string): CsvParseResult {
 
     const totalValue = totalValueStr ? parseFloat(totalValueStr) : units * price;
     if (totalValueStr && isNaN(totalValue)) {
-      rowErrors.push({ row: rowNum, column: "Total Value", message: "Total Value must be a number", rawValue: totalValueStr });
+      rowErrors.push({
+        row: rowNum,
+        column: "Total Value",
+        message: "Total Value must be a number",
+        rawValue: totalValueStr,
+      });
     }
 
     if (rowErrors.length > 0) {
@@ -583,12 +744,12 @@ export function parsePortfolioCsv(csvContent: string): CsvParseResult {
       continue;
     }
 
-    // ── Check for non-importable asset types ──
+    // ── Check for specialised asset types without additional parameters ──
     const resolvedAssetType = CSV_TO_ASSET_TYPE[assetTypeStr.toUpperCase()] ?? AssetType.UNKNOWN;
-    if (NON_IMPORTABLE_ASSET_TYPES.has(resolvedAssetType)) {
+    if (SPECIALISED_ASSET_TYPES.has(resolvedAssetType) && !additionalParameters) {
       result.skipped.push({
         row: rowNum,
-        reason: `${assetTypeStr} positions require specialised data and cannot be imported from CSV. Add them manually in Portfolio Tracker.`,
+        reason: `${assetTypeStr} positions require additional parameters (JSON) to import. Add them manually in Portfolio Tracker or re-export with the Additional Parameters column.`,
       });
       continue;
     }
@@ -605,6 +766,7 @@ export function parsePortfolioCsv(csvContent: string): CsvParseResult {
       currency: currency.toUpperCase(),
       assetType: assetTypeStr.toUpperCase(),
       lastUpdated,
+      additionalParameters: additionalParameters || undefined,
     });
   }
 
@@ -647,6 +809,9 @@ export function buildPortfolioFromCsvRows(rows: CsvRow[]): CsvImportResult {
 
     const assetType = CSV_TO_ASSET_TYPE[row.assetType.toUpperCase()] ?? AssetType.UNKNOWN;
 
+    // Parse additional parameters for specialised position types
+    const { mortgageData, debtData } = parseAdditionalParameters(row.additionalParameters, assetType);
+
     const position: Position = {
       id: generateId(),
       symbol: row.symbol,
@@ -656,6 +821,8 @@ export function buildPortfolioFromCsvRows(rows: CsvRow[]): CsvImportResult {
       assetType,
       priceOverride: row.price > 0 ? row.price : undefined,
       addedAt: row.lastUpdated || new Date().toISOString(),
+      ...(mortgageData ? { mortgageData } : {}),
+      ...(debtData ? { debtData } : {}),
     };
 
     accountMap.get(row.accountName)!.positions.push(position);
@@ -680,7 +847,9 @@ export function buildPortfolioFromCsvRows(rows: CsvRow[]): CsvImportResult {
     updatedAt: now,
   };
 
-  messages.push(`Imported ${rows.length} position${rows.length === 1 ? "" : "s"} across ${accounts.length} account${accounts.length === 1 ? "" : "s"}.`);
+  messages.push(
+    `Imported ${rows.length} position${rows.length === 1 ? "" : "s"} across ${accounts.length} account${accounts.length === 1 ? "" : "s"}.`,
+  );
 
   return {
     portfolio,

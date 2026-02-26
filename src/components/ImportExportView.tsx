@@ -19,7 +19,7 @@
  * @module ImportExportView
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   List,
   ActionPanel,
@@ -32,6 +32,7 @@ import {
   confirmAlert,
   Alert,
   Form,
+  Color,
   open,
 } from "@raycast/api";
 import { Portfolio, PortfolioValuation, Account } from "../utils/types";
@@ -44,6 +45,7 @@ import {
   generateExportFilename,
   CsvParseResult,
   CsvImportResult,
+  CsvRow,
   ExportPositionData,
 } from "../utils/csv-portfolio";
 import { writeFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -71,7 +73,7 @@ type Phase =
   | { type: "menu" }
   | { type: "export-done"; csv: string; filename: string; path: string }
   | { type: "import-file-path" }
-  | { type: "import-preview"; parseResult: CsvParseResult; importResult: CsvImportResult; sourceLabel: string }
+  | { type: "import-preview"; parseResult: CsvParseResult; sourceLabel: string }
   | { type: "import-done"; importResult: CsvImportResult };
 
 // ──────────────────────────────────────────
@@ -156,8 +158,7 @@ export function ImportExportView({
         });
       }
 
-      const importResult = buildPortfolioFromCsvRows(parseResult.rows);
-      setPhase({ type: "import-preview", parseResult, importResult, sourceLabel });
+      setPhase({ type: "import-preview", parseResult, sourceLabel });
 
       if (parseResult.rows.length > 0) {
         await showToast({
@@ -255,10 +256,21 @@ export function ImportExportView({
   // ── Confirm Import Handler ──
 
   const handleConfirmImport = useCallback(
-    async (importResult: CsvImportResult) => {
+    async (selectedRows: CsvRow[]) => {
       if (!portfolio) return;
 
-      // Check for duplicates
+      if (selectedRows.length === 0) {
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Nothing Selected",
+          message: "No positions selected for import.",
+        });
+        return;
+      }
+
+      const importResult = buildPortfolioFromCsvRows(selectedRows);
+
+      // Check for duplicates among the selected rows
       const duplicates = findDuplicates(portfolio, importResult.portfolio);
       if (duplicates.length > 0) {
         const dupSummary = duplicates
@@ -268,8 +280,8 @@ export function ImportExportView({
         const suffix = duplicates.length > 5 ? ` and ${duplicates.length - 5} more` : "";
 
         const confirmed = await confirmAlert({
-          title: "Duplicate Positions Found",
-          message: `These symbols already exist in your portfolio: ${dupSummary}${suffix}. Import will add them as new entries alongside existing ones.`,
+          title: "Duplicate Positions Included",
+          message: `These symbols already exist in your portfolio: ${dupSummary}${suffix}. They will be added as new entries alongside existing ones.`,
           primaryAction: { title: "Import Anyway", style: Alert.ActionStyle.Default },
           dismissAction: { title: "Cancel" },
         });
@@ -322,7 +334,6 @@ export function ImportExportView({
       return (
         <ImportPreviewPhase
           parseResult={phase.parseResult}
-          importResult={phase.importResult}
           sourceLabel={phase.sourceLabel}
           existingPortfolio={portfolio}
           onConfirm={handleConfirmImport}
@@ -564,145 +575,261 @@ function ExportDonePhase({
 // Phase: Import Preview
 // ──────────────────────────────────────────
 
+/** Map asset type strings to Raycast icons for the import preview list */
+const IMPORT_ASSET_TYPE_ICONS: Record<string, Icon> = {
+  EQUITY: Icon.Building,
+  ETF: Icon.BarChart,
+  MUTUALFUND: Icon.BankNote,
+  INDEX: Icon.LineChart,
+  CURRENCY: Icon.Coins,
+  CRYPTOCURRENCY: Icon.Crypto,
+  OPTION: Icon.Switch,
+  FUTURE: Icon.Calendar,
+  CASH: Icon.BankNote,
+  MORTGAGE: Icon.House,
+  OWNED_PROPERTY: Icon.House,
+  CREDIT_CARD: Icon.CreditCard,
+  LOAN: Icon.BankNote,
+  STUDENT_LOAN: Icon.Book,
+  AUTO_LOAN: Icon.Car,
+  BNPL: Icon.CreditCard,
+  UNKNOWN: Icon.QuestionMarkCircle,
+};
+
 function ImportPreviewPhase({
   parseResult,
-  importResult,
   sourceLabel,
   existingPortfolio,
   onConfirm,
   setPhase,
 }: {
   parseResult: CsvParseResult;
-  importResult: CsvImportResult;
   sourceLabel: string;
   existingPortfolio: Portfolio | undefined;
-  onConfirm: (result: CsvImportResult) => Promise<void>;
+  onConfirm: (selectedRows: CsvRow[]) => Promise<void>;
   setPhase: React.Dispatch<React.SetStateAction<Phase>>;
 }): React.JSX.Element {
-  const { rows, errors, skipped, totalRawRows } = parseResult;
+  const { rows, errors, skipped } = parseResult;
   const hasErrors = errors.length > 0;
   const hasSkipped = skipped.length > 0;
-  const canImport = rows.length > 0;
 
-  // Check duplicates against existing portfolio
-  const duplicates = existingPortfolio ? findDuplicates(existingPortfolio, importResult.portfolio) : [];
-  const hasDuplicates = duplicates.length > 0;
+  // ── Compute duplicate set from parsed rows ──
+  // Build a temporary import result to check duplicates
+  const duplicateSet = useMemo(() => {
+    const tempResult = buildPortfolioFromCsvRows(rows);
+    const duplicates = existingPortfolio ? findDuplicates(existingPortfolio, tempResult.portfolio) : [];
+    // Build a Set of "accountName::symbol" keys for O(1) lookup
+    const set = new Set<string>();
+    for (const dup of duplicates) {
+      set.add(`${dup.accountName.toLowerCase()}::${dup.symbol.toUpperCase()}`);
+    }
+    return set;
+  }, [rows, existingPortfolio]);
 
-  // ── Build summary markdown ──
-  const lines: string[] = [];
-  lines.push("# 📋 Import Preview");
-  lines.push("");
-  lines.push(`**Source:** \`${sourceLabel}\``);
-  lines.push("");
+  // ── Selection state: track deselected indices (most rows start selected) ──
+  // Duplicates start deselected, everything else starts selected
+  const [deselected, setDeselected] = useState<Set<number>>(() => {
+    const initial = new Set<number>();
+    for (let i = 0; i < rows.length; i++) {
+      const key = `${rows[i].accountName.toLowerCase()}::${rows[i].symbol.toUpperCase()}`;
+      if (duplicateSet.has(key)) {
+        initial.add(i);
+      }
+    }
+    return initial;
+  });
 
-  // Stats table
-  lines.push("### Summary");
-  lines.push("");
-  lines.push("| Metric | Count |");
-  lines.push("|--------|-------|");
-  lines.push(`| Total rows parsed | ${totalRawRows} |`);
-  lines.push(`| ✅ Valid positions | ${rows.length} |`);
-  if (hasErrors) lines.push(`| ❌ Errors | ${errors.length} |`);
-  if (hasSkipped) lines.push(`| ⏭️ Skipped | ${skipped.length} |`);
-  lines.push(`| 📁 Accounts | ${importResult.accountCount} |`);
-  if (hasDuplicates) lines.push(`| ⚠️ Duplicates | ${duplicates.length} |`);
-  lines.push("");
+  const selectedCount = rows.length - deselected.size;
+  const accountSet = useMemo(() => {
+    const set = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      if (!deselected.has(i)) {
+        set.add(rows[i].accountName);
+      }
+    }
+    return set;
+  }, [rows, deselected]);
 
-  // Positions preview
-  if (rows.length > 0) {
-    lines.push("### Positions to Import");
-    lines.push("");
-    lines.push("| Account | Asset | Symbol | Units | Currency |");
-    lines.push("|---------|-------|--------|-------|----------|");
-    const displayRows = rows.slice(0, 20);
-    for (const row of displayRows) {
-      lines.push(`| ${row.accountName} | ${row.assetName} | ${row.symbol} | ${row.units} | ${row.currency} |`);
-    }
-    if (rows.length > 20) {
-      lines.push(`| *…and ${rows.length - 20} more* | | | | |`);
-    }
-    lines.push("");
-  }
+  const toggleRow = useCallback((index: number) => {
+    setDeselected((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }, []);
 
-  // Duplicates warning
-  if (hasDuplicates) {
-    lines.push("### ⚠️ Duplicate Positions");
-    lines.push("");
-    lines.push("These symbols already exist in your portfolio and will be added as new entries:");
-    lines.push("");
-    for (const dup of duplicates.slice(0, 10)) {
-      lines.push(`- **${dup.symbol}** in "${dup.accountName}" (${dup.existingCount} existing)`);
-    }
-    if (duplicates.length > 10) {
-      lines.push(`- *…and ${duplicates.length - 10} more*`);
-    }
-    lines.push("");
-  }
+  const selectAll = useCallback(() => {
+    setDeselected(new Set());
+  }, []);
 
-  // Errors
-  if (hasErrors) {
-    lines.push("### ❌ Errors");
-    lines.push("");
-    for (const err of errors.slice(0, 15)) {
-      const rawVal = err.rawValue ? ` (got: \`${err.rawValue}\`)` : "";
-      lines.push(`- **Row ${err.row}**, ${err.column}: ${err.message}${rawVal}`);
-    }
-    if (errors.length > 15) {
-      lines.push(`- *…and ${errors.length - 15} more errors*`);
-    }
-    lines.push("");
-  }
+  const deselectAll = useCallback(() => {
+    setDeselected(new Set(rows.map((_, i) => i)));
+  }, [rows]);
 
-  // Skipped
-  if (hasSkipped) {
-    lines.push("### ⏭️ Skipped Rows");
-    lines.push("");
-    for (const skip of skipped.slice(0, 10)) {
-      lines.push(`- **Row ${skip.row}**: ${skip.reason}`);
-    }
-    if (skipped.length > 10) {
-      lines.push(`- *…and ${skipped.length - 10} more skipped*`);
-    }
-    lines.push("");
-  }
+  // ── Build summary line ──
+  const errorSuffix = hasErrors ? `, ${errors.length} error${errors.length === 1 ? "" : "s"}` : "";
+  const skippedSuffix = hasSkipped ? `, ${skipped.length} skipped` : "";
+  const dupCount = duplicateSet.size;
+  const dupSuffix = dupCount > 0 ? `, ${dupCount} duplicate${dupCount === 1 ? "" : "s"}` : "";
+  const summaryText = `${rows.length} position${rows.length === 1 ? "" : "s"} read over ${accountSet.size} account${accountSet.size === 1 ? "" : "s"}${errorSuffix}${skippedSuffix}${dupSuffix}`;
+
+  const handleConfirm = useCallback(() => {
+    const selectedRows = rows.filter((_, i) => !deselected.has(i));
+    onConfirm(selectedRows);
+  }, [rows, deselected, onConfirm]);
 
   return (
-    <Detail
-      navigationTitle="Import Preview"
-      markdown={lines.join("\n")}
-      actions={
-        <ActionPanel>
-          {canImport && (
-            <Action
-              title={`Import ${rows.length} Position${rows.length === 1 ? "" : "s"}`}
-              icon={Icon.Download}
-              onAction={() => onConfirm(importResult)}
+    <List navigationTitle="Import Preview">
+      {/* ── Summary Row ── */}
+      <List.Section title="Summary">
+        <List.Item
+          icon={{ source: Icon.Document, tintColor: Color.Blue }}
+          title={summaryText}
+          subtitle={`Source: ${sourceLabel}`}
+          accessories={[{ text: `${selectedCount} selected`, icon: Icon.Checkmark }]}
+          actions={
+            <ActionPanel>
+              {selectedCount > 0 && (
+                <Action
+                  title={`Import ${selectedCount} Position${selectedCount === 1 ? "" : "s"}`}
+                  icon={Icon.Download}
+                  onAction={handleConfirm}
+                />
+              )}
+              <Action
+                title="Select All"
+                icon={Icon.CheckCircle}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+                onAction={selectAll}
+              />
+              <Action
+                title="Deselect All"
+                icon={Icon.Circle}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+                onAction={deselectAll}
+              />
+              <Action
+                title="Back to Menu"
+                icon={Icon.ArrowLeft}
+                shortcut={{ modifiers: ["cmd"], key: "backspace" }}
+                onAction={() => setPhase({ type: "menu" })}
+              />
+            </ActionPanel>
+          }
+        />
+      </List.Section>
+
+      {/* ── Position Rows ── */}
+      {rows.length > 0 && (
+        <List.Section title="Positions" subtitle={`${selectedCount} of ${rows.length} selected`}>
+          {rows.map((row, index) => {
+            const isSelected = !deselected.has(index);
+            const isDuplicate = duplicateSet.has(`${row.accountName.toLowerCase()}::${row.symbol.toUpperCase()}`);
+            const assetIcon = IMPORT_ASSET_TYPE_ICONS[row.assetType.toUpperCase()] ?? Icon.QuestionMarkCircle;
+
+            const titlePrefix = isDuplicate ? "⚠️ " : "";
+            const title = `${titlePrefix}${row.assetName}`;
+            const subtitle = `${row.symbol} · ${row.units} units · ${row.currency}`;
+
+            return (
+              <List.Item
+                key={`pos-${index}`}
+                icon={
+                  isSelected
+                    ? { source: Icon.Checkmark, tintColor: Color.Green }
+                    : { source: Icon.Circle, tintColor: Color.SecondaryText }
+                }
+                title={title}
+                subtitle={subtitle}
+                accessories={[
+                  ...(isDuplicate
+                    ? [
+                        {
+                          tag: { value: "duplicate", color: Color.Orange },
+                          tooltip: `Already exists in "${row.accountName}"`,
+                        },
+                      ]
+                    : []),
+                  { text: row.accountName, icon: assetIcon },
+                ]}
+                actions={
+                  <ActionPanel>
+                    <Action
+                      title={isSelected ? "Deselect" : "Select"}
+                      icon={isSelected ? Icon.Circle : Icon.Checkmark}
+                      onAction={() => toggleRow(index)}
+                    />
+                    {selectedCount > 0 && (
+                      <Action
+                        title={`Import ${selectedCount} Position${selectedCount === 1 ? "" : "s"}`}
+                        icon={Icon.Download}
+                        shortcut={{ modifiers: ["cmd", "shift"], key: "return" }}
+                        onAction={handleConfirm}
+                      />
+                    )}
+                    <Action
+                      title="Select All"
+                      icon={Icon.CheckCircle}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+                      onAction={selectAll}
+                    />
+                    <Action
+                      title="Deselect All"
+                      icon={Icon.Circle}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+                      onAction={deselectAll}
+                    />
+                    <Action
+                      title="Back to Menu"
+                      icon={Icon.ArrowLeft}
+                      shortcut={{ modifiers: ["cmd"], key: "backspace" }}
+                      onAction={() => setPhase({ type: "menu" })}
+                    />
+                  </ActionPanel>
+                }
+              />
+            );
+          })}
+        </List.Section>
+      )}
+
+      {/* ── Errors ── */}
+      {hasErrors && (
+        <List.Section title="❌ Errors" subtitle={`${errors.length} error${errors.length === 1 ? "" : "s"}`}>
+          {errors.slice(0, 20).map((err, index) => {
+            const rawVal = err.rawValue ? ` (got: "${err.rawValue}")` : "";
+            return (
+              <List.Item
+                key={`err-${index}`}
+                icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
+                title={`Row ${err.row}: ${err.message}${rawVal}`}
+                subtitle={err.column}
+              />
+            );
+          })}
+          {errors.length > 20 && <List.Item icon={Icon.Ellipsis} title={`…and ${errors.length - 20} more errors`} />}
+        </List.Section>
+      )}
+
+      {/* ── Skipped ── */}
+      {hasSkipped && (
+        <List.Section title="⏭️ Skipped" subtitle={`${skipped.length} skipped`}>
+          {skipped.slice(0, 15).map((skip, index) => (
+            <List.Item
+              key={`skip-${index}`}
+              icon={{ source: Icon.ArrowRightCircle, tintColor: Color.SecondaryText }}
+              title={`Row ${skip.row}`}
+              subtitle={skip.reason}
             />
-          )}
-          <Action
-            title="Back to Menu"
-            icon={Icon.ArrowLeft}
-            shortcut={{ modifiers: ["cmd"], key: "backspace" }}
-            onAction={() => setPhase({ type: "menu" })}
-          />
-        </ActionPanel>
-      }
-      metadata={
-        <Detail.Metadata>
-          <Detail.Metadata.Label title="Source" text={sourceLabel} icon={Icon.Document} />
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="Valid Positions" text={String(rows.length)} icon={Icon.Checkmark} />
-          <Detail.Metadata.Label title="Accounts" text={String(importResult.accountCount)} icon={Icon.TwoPeople} />
-          {hasErrors && <Detail.Metadata.Label title="Errors" text={String(errors.length)} icon={Icon.XMarkCircle} />}
-          {hasSkipped && (
-            <Detail.Metadata.Label title="Skipped" text={String(skipped.length)} icon={Icon.ArrowRightCircle} />
-          )}
-          {hasDuplicates && (
-            <Detail.Metadata.Label title="Duplicates" text={String(duplicates.length)} icon={Icon.Warning} />
-          )}
-        </Detail.Metadata>
-      }
-    />
+          ))}
+          {skipped.length > 15 && <List.Item icon={Icon.Ellipsis} title={`…and ${skipped.length - 15} more skipped`} />}
+        </List.Section>
+      )}
+    </List>
   );
 }
 
