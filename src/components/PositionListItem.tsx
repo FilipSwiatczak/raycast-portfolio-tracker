@@ -55,7 +55,14 @@ import {
   getDisplayName,
   hasCustomName,
 } from "../utils/formatting";
-import { ASSET_TYPE_LABELS, COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
+import {
+  ASSET_TYPE_LABELS,
+  COLOR_POSITIVE,
+  COLOR_NEGATIVE,
+  COLOR_NEUTRAL,
+  COLOR_PRIMARY,
+  COLOR_MUTED,
+} from "../utils/constants";
 import { calculateCurrentEquity, getCurrentPrincipalInterestRatio } from "../services/mortgage-calculator";
 
 // ──────────────────────────────────────────
@@ -233,7 +240,7 @@ interface ListModeProps {
   currentPrice: number;
   totalBaseValue: number;
   changePercent: number;
-  changeColor: Color;
+  changeColor: Color.ColorLike;
   baseCurrency: string;
   displayName: string;
   isRenamed: boolean;
@@ -303,14 +310,14 @@ function renderListMode({
   if (isCash) {
     // Cash: just show total value in base currency (or native if same)
     accessories.push({
-      text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: Color.PrimaryText },
+      text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: COLOR_PRIMARY },
       tooltip: `Cash balance: ${formatCurrency(totalBaseValue, baseCurrency)}`,
     });
   } else if (isDebt && position.debtData) {
     // Debt: show balance (positive for display) and paid-off / archived tags
     if (isPaidOff) {
       accessories.push({
-        tag: { value: "☑️ Paid Off", color: Color.SecondaryText },
+        tag: { value: "☑️ Paid Off", color: COLOR_MUTED },
         tooltip: "This debt has been fully repaid",
       });
     } else {
@@ -318,14 +325,14 @@ function renderListMode({
       accessories.push({
         text: {
           value: formatCurrencyCompact(currentPrice, position.currency),
-          color: Color.Red,
+          color: COLOR_NEGATIVE,
         },
         tooltip: `Outstanding balance: ${formatCurrency(currentPrice, position.currency)}`,
       });
     }
     if (isArchived) {
       accessories.push({
-        tag: { value: "📦 Archived", color: Color.SecondaryText },
+        tag: { value: "📦 Archived", color: COLOR_MUTED },
         tooltip: "This debt is archived and excluded from totals",
       });
     }
@@ -334,7 +341,7 @@ function renderListMode({
       accessories.push({
         text: {
           value: formatCurrencyCompact(totalBaseValue, baseCurrency),
-          color: Color.Red,
+          color: COLOR_NEGATIVE,
         },
         tooltip: `Debt value: ${formatCurrency(totalBaseValue, baseCurrency)} (subtracted from portfolio)`,
       });
@@ -342,7 +349,7 @@ function renderListMode({
   } else if (hasPrice) {
     // Price / equity in native currency
     accessories.push({
-      text: { value: formatCurrency(currentPrice, position.currency), color: Color.SecondaryText },
+      text: { value: formatCurrency(currentPrice, position.currency), color: COLOR_MUTED },
       tooltip: isProperty ? `Equity in ${position.currency}` : `Price per unit in ${position.currency}`,
     });
 
@@ -369,14 +376,14 @@ function renderListMode({
 
     // Total value / equity in base currency (rightmost = most prominent)
     accessories.push({
-      text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: Color.PrimaryText },
+      text: { value: formatCurrencyCompact(totalBaseValue, baseCurrency), color: COLOR_PRIMARY },
       tooltip: isProperty
         ? `Equity: ${formatCurrency(totalBaseValue, baseCurrency)}`
         : `Total value: ${formatCurrency(totalBaseValue, baseCurrency)}`,
     });
   } else {
     accessories.push({
-      text: { value: "No price", color: Color.SecondaryText },
+      text: { value: "No price", color: COLOR_MUTED },
       tooltip: "Price data not yet available",
     });
   }
@@ -422,7 +429,7 @@ interface DetailModeProps {
   totalBaseValue: number;
   change: number;
   changePercent: number;
-  changeColor: Color;
+  changeColor: Color.ColorLike;
   fxRate: number;
   isCrossCurrency: boolean;
   baseCurrency: string;
@@ -623,8 +630,8 @@ function buildDebtDetail({
           {/* ── Status (combined into one row if both present) ── */}
           {(isPaidOff || isArchived) && (
             <List.Item.Detail.Metadata.TagList title="Status">
-              {isPaidOff && <List.Item.Detail.Metadata.TagList.Item text="☑️ Paid Off" color={Color.SecondaryText} />}
-              {isArchived && <List.Item.Detail.Metadata.TagList.Item text="📦 Archived" color={Color.SecondaryText} />}
+              {isPaidOff && <List.Item.Detail.Metadata.TagList.Item text="☑️ Paid Off" color={COLOR_MUTED} />}
+              {isArchived && <List.Item.Detail.Metadata.TagList.Item text="📦 Archived" color={COLOR_MUTED} />}
             </List.Item.Detail.Metadata.TagList>
           )}
           <List.Item.Detail.Metadata.Label
@@ -788,7 +795,7 @@ function buildPropertyDetail({
           {isRenamed && (
             <List.Item.Detail.Metadata.Label
               title="Original Name"
-              text={{ value: position.name, color: Color.SecondaryText }}
+              text={{ value: position.name, color: COLOR_MUTED }}
             />
           )}
           <List.Item.Detail.Metadata.TagList title="Type">
@@ -991,7 +998,7 @@ function buildSecuritiesDetail({
           {isRenamed && (
             <List.Item.Detail.Metadata.Label
               title="Original Name"
-              text={{ value: position.name, color: Color.SecondaryText }}
+              text={{ value: position.name, color: COLOR_MUTED }}
             />
           )}
           <List.Item.Detail.Metadata.Label title="Symbol" text={position.symbol} />
@@ -1017,10 +1024,7 @@ function buildSecuritiesDetail({
               />
             </>
           ) : (
-            <List.Item.Detail.Metadata.Label
-              title="Price"
-              text={{ value: "Unavailable", color: Color.SecondaryText }}
-            />
+            <List.Item.Detail.Metadata.Label title="Price" text={{ value: "Unavailable", color: COLOR_MUTED }} />
           )}
 
           <List.Item.Detail.Metadata.Separator />

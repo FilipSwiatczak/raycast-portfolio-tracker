@@ -26,7 +26,15 @@
 import React from "react";
 import { Action, ActionPanel, Color, Icon, List } from "@raycast/api";
 import { AssetSearchResult, AssetType } from "../utils/types";
-import { ASSET_TYPE_LABELS } from "../utils/constants";
+import {
+  ASSET_TYPE_LABELS,
+  COLOR_PRIMARY,
+  COLOR_POSITIVE,
+  COLOR_NEGATIVE,
+  COLOR_MUTED,
+  COLOR_WARNING,
+  COLOR_NEUTRAL,
+} from "../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -52,23 +60,23 @@ interface SearchResultItemProps {
  * Uses Raycast's built-in Color values for consistency with the design system.
  */
 const ASSET_TYPE_COLORS: Record<AssetType, Color.ColorLike> = {
-  [AssetType.EQUITY]: Color.Blue,
-  [AssetType.ETF]: Color.Green,
-  [AssetType.MUTUALFUND]: Color.Purple,
-  [AssetType.INDEX]: Color.Orange,
-  [AssetType.CURRENCY]: Color.Yellow,
-  [AssetType.CRYPTOCURRENCY]: Color.Magenta,
-  [AssetType.OPTION]: Color.Red,
-  [AssetType.FUTURE]: Color.Red,
-  [AssetType.CASH]: Color.Green,
-  [AssetType.MORTGAGE]: Color.Orange,
-  [AssetType.OWNED_PROPERTY]: Color.Orange,
-  [AssetType.CREDIT_CARD]: Color.Red,
-  [AssetType.LOAN]: Color.Red,
-  [AssetType.STUDENT_LOAN]: Color.Red,
-  [AssetType.AUTO_LOAN]: Color.Red,
-  [AssetType.BNPL]: Color.Red,
-  [AssetType.UNKNOWN]: Color.SecondaryText,
+  [AssetType.EQUITY]: COLOR_PRIMARY,
+  [AssetType.ETF]: COLOR_POSITIVE,
+  [AssetType.MUTUALFUND]: COLOR_MUTED,
+  [AssetType.INDEX]: COLOR_WARNING,
+  [AssetType.CURRENCY]: COLOR_WARNING,
+  [AssetType.CRYPTOCURRENCY]: COLOR_NEGATIVE,
+  [AssetType.OPTION]: COLOR_NEGATIVE,
+  [AssetType.FUTURE]: COLOR_NEGATIVE,
+  [AssetType.CASH]: COLOR_POSITIVE,
+  [AssetType.MORTGAGE]: COLOR_PRIMARY,
+  [AssetType.OWNED_PROPERTY]: COLOR_PRIMARY,
+  [AssetType.CREDIT_CARD]: COLOR_NEGATIVE,
+  [AssetType.LOAN]: COLOR_NEGATIVE,
+  [AssetType.STUDENT_LOAN]: COLOR_NEGATIVE,
+  [AssetType.AUTO_LOAN]: COLOR_NEGATIVE,
+  [AssetType.BNPL]: COLOR_NEGATIVE,
+  [AssetType.UNKNOWN]: COLOR_NEUTRAL,
 };
 
 /**
@@ -120,7 +128,7 @@ export function SearchResultItem({ result, onSelect }: SearchResultItemProps): R
   return (
     <List.Item
       id={result.symbol}
-      icon={icon}
+      icon={{ source: icon, tintColor: typeColor }}
       title={result.name}
       subtitle={result.symbol}
       accessories={[

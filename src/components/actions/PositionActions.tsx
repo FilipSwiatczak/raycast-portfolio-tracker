@@ -30,10 +30,10 @@
  */
 
 import React from "react";
-import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
+import { Action, ActionPanel, Alert, Icon, confirmAlert } from "@raycast/api";
 import { Position, isDebtAssetType } from "../../utils/types";
 import { getDisplayName, hasCustomName, formatUnits } from "../../utils/formatting";
-import { ASSET_TYPE_LABELS } from "../../utils/constants";
+import { ASSET_TYPE_LABELS, COLOR_DESTRUCTIVE } from "../../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -152,7 +152,7 @@ export function PositionActions({
     const confirmed = await confirmAlert({
       title: `Remove "${displayName}"?`,
       message: `This will remove ${formatUnits(position.units)} unit${position.units === 1 ? "" : "s"} of ${position.symbol} from your account. This action cannot be undone.`,
-      icon: { source: Icon.Trash, tintColor: Color.Red },
+      icon: { source: Icon.Trash, tintColor: COLOR_DESTRUCTIVE },
       primaryAction: {
         title: "Remove Position",
         style: Alert.ActionStyle.Destructive,

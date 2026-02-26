@@ -41,11 +41,12 @@
 
 import React from "react";
 import { useState, useMemo } from "react";
-import { List, Form, ActionPanel, Action, Alert, Icon, Color, confirmAlert } from "@raycast/api";
+import { List, Form, ActionPanel, Action, Alert, Icon, confirmAlert } from "@raycast/api";
 import { Account } from "../utils/types";
 import { FireContribution } from "../utils/fire-types";
 import { getDisplayName } from "../utils/formatting";
 import { generateId } from "../utils/uuid";
+import { COLOR_DESTRUCTIVE, COLOR_PRIMARY } from "../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -268,7 +269,7 @@ export function FireContributions({
     const confirmed = await confirmAlert({
       title: "Remove Contribution?",
       message: `Remove ${label} from your monthly contributions?`,
-      icon: { source: Icon.Trash, tintColor: Color.Red },
+      icon: { source: Icon.Trash, tintColor: COLOR_DESTRUCTIVE },
       primaryAction: {
         title: "Remove",
         style: Alert.ActionStyle.Destructive,
@@ -399,12 +400,15 @@ export function FireContributions({
             return (
               <List.Item
                 key={contribution.id}
-                icon={info ? Icon.ArrowRight : Icon.ExclamationMark}
+                icon={{
+                  source: info ? Icon.ArrowRight : Icon.ExclamationMark,
+                  tintColor: info ? COLOR_PRIMARY : COLOR_DESTRUCTIVE,
+                }}
                 title={title}
                 subtitle={subtitle}
                 accessories={[
                   {
-                    tag: { value: accountTag, color: info ? Color.Blue : Color.Red },
+                    tag: { value: accountTag, color: info ? COLOR_PRIMARY : COLOR_DESTRUCTIVE },
                     tooltip: info ? `Account: ${accountTag}` : "Position was deleted from portfolio",
                   },
                   {

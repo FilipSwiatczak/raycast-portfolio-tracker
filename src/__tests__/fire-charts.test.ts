@@ -517,15 +517,15 @@ describe("buildProjectionSVG", () => {
   it("includes both dark AND light palette colours in CSS regardless of theme param", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig); // theme: "dark"
     // Dark palette colours in CSS (hex + fill-opacity, no rgba)
-    expect(svg).toContain(".c-bg { fill: #1C1C1E; }");
-    expect(svg).toContain(".c-base { fill: #FFFFFF; fill-opacity: 0.75; }");
-    expect(svg).toContain(".c-contrib { fill: #4A9EFF; }");
-    expect(svg).toContain(".c-target { stroke: #FF9F0A; }");
+    expect(svg).toContain(".c-bg { fill: #23395B; }");
+    expect(svg).toContain(".c-base { fill: #FFFD98; fill-opacity: 0.75; }");
+    expect(svg).toContain(".c-contrib { fill: #59C9A5; }");
+    expect(svg).toContain(".c-target { stroke: #D81E5B; }");
     // Light palette colours also in CSS
-    expect(svg).toContain(".c-bg { fill: #FFFFFF; }");
-    expect(svg).toContain(".c-base { fill: #000000; fill-opacity: 0.55; }");
-    expect(svg).toContain(".c-contrib { fill: #007AFF; }");
-    expect(svg).toContain(".c-target { stroke: #FF9500; }");
+    expect(svg).toContain(".c-bg { fill: #FFFD98; }");
+    expect(svg).toContain(".c-base { fill: #23395B; fill-opacity: 0.55; }");
+    expect(svg).toContain(".c-contrib { fill: #59C9A5; }");
+    expect(svg).toContain(".c-target { stroke: #D81E5B; }");
   });
 
   it("applies CSS class attributes to themed elements", () => {
@@ -546,20 +546,20 @@ describe("buildProjectionSVG", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
     // Inline presentation attribute as fallback when CSS media queries unsupported
     expect(svg).toContain('class="c-bg"');
-    expect(svg).toContain('fill="#1C1C1E"');
+    expect(svg).toContain('fill="#23395B"');
   });
 
   it("includes inline fill fallback on background rect for light theme", () => {
     const lightConfig: ChartConfig = { ...defaultConfig, theme: "light" };
     const svg = buildProjectionSVG(sampleBars, lightConfig);
     // Inline presentation attribute uses the theme param for fallback
-    expect(svg).toMatch(/class="c-bg"[^>]*fill="#FFFFFF"/);
+    expect(svg).toMatch(/class="c-bg"[^>]*fill="#FFFD98"/);
   });
 
   it("contains a rect for each bar track with class and inline fallback", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
     // Each bar has a track rect with class, hex fill, and fill-opacity (no rgba)
-    const trackMatches = svg.match(/class="c-track"[^>]*fill="#FFFFFF"[^>]*fill-opacity="0\.06"/g);
+    const trackMatches = svg.match(/class="c-track"[^>]*fill="#B9E3C6"[^>]*fill-opacity="0\.08"/g);
     expect(trackMatches).not.toBeNull();
     expect(trackMatches!.length).toBe(sampleBars.length);
   });
@@ -567,13 +567,13 @@ describe("buildProjectionSVG", () => {
   it("contains base growth rect elements with class and inline fallback", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
     // Base growth rects have class for CSS override and hex fill + fill-opacity as fallback
-    expect(svg).toMatch(/class="c-base"[^>]*fill="#FFFFFF"[^>]*fill-opacity="0\.75"/);
+    expect(svg).toMatch(/class="c-base"[^>]*fill="#FFFD98"[^>]*fill-opacity="0\.75"/);
   });
 
   it("contains contribution rect elements with class and inline fallback", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
     // Contribution rects have class for CSS override and inline fill as fallback
-    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#4A9EFF"/);
+    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#59C9A5"/);
   });
 
   it("contains year labels", () => {
@@ -592,14 +592,14 @@ describe("buildProjectionSVG", () => {
 
   it("contains the target dashed line with class and inline fallback", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
-    expect(svg).toMatch(/class="c-target"[^>]*stroke="#FF9F0A"/);
+    expect(svg).toMatch(/class="c-target"[^>]*stroke="#D81E5B"/);
     expect(svg).toContain("stroke-dasharray");
   });
 
   it("highlights the FIRE year row with class and inline fallback", () => {
     const svg = buildProjectionSVG(sampleBars, defaultConfig);
     // FIRE highlight rect has class for CSS and hex fill + fill-opacity as fallback
-    expect(svg).toMatch(/class="c-fire-hl"[^>]*fill="#34C759"[^>]*fill-opacity="0\.12"/);
+    expect(svg).toMatch(/class="c-fire-hl"[^>]*fill="#59C9A5"[^>]*fill-opacity="0\.18"/);
   });
 
   it("applies fire accent class to FIRE year labels", () => {
@@ -629,9 +629,9 @@ describe("buildProjectionSVG", () => {
     const lightConfig: ChartConfig = { ...defaultConfig, theme: "light" };
     const svg = buildProjectionSVG(sampleBars, lightConfig);
     // Inline fallback attributes use light palette colours (hex + fill-opacity, no rgba)
-    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#007AFF"/); // light blue contributions
-    expect(svg).toMatch(/class="c-base"[^>]*fill="#000000"[^>]*fill-opacity="0\.55"/); // dark base growth
-    expect(svg).toMatch(/class="c-target"[^>]*stroke="#FF9500"/); // light orange target
+    expect(svg).toMatch(/class="c-contrib"[^>]*fill="#59C9A5"/);
+    expect(svg).toMatch(/class="c-base"[^>]*fill="#23395B"[^>]*fill-opacity="0\.55"/);
+    expect(svg).toMatch(/class="c-target"[^>]*stroke="#D81E5B"/);
   });
 
   it("still contains both CSS palettes even when theme is light", () => {
@@ -639,11 +639,11 @@ describe("buildProjectionSVG", () => {
     const svg = buildProjectionSVG(sampleBars, lightConfig);
     // CSS block always contains both palettes for auto-detection
     expect(svg).toContain("@media (prefers-color-scheme: dark)");
-    expect(svg).toContain(".c-bg { fill: #1C1C1E; }");
-    expect(svg).toContain(".c-text { fill: #FFFFFF; fill-opacity: 0.82; }");
+    expect(svg).toContain(".c-bg { fill: #23395B; }");
+    expect(svg).toContain(".c-text { fill: #FFFD98; fill-opacity: 0.9; }");
     expect(svg).toContain("@media (prefers-color-scheme: light)");
-    expect(svg).toContain(".c-bg { fill: #FFFFFF; }");
-    expect(svg).toContain(".c-text { fill: #000000; fill-opacity: 0.82; }");
+    expect(svg).toContain(".c-bg { fill: #FFFD98; }");
+    expect(svg).toContain(".c-text { fill: #23395B; fill-opacity: 0.82; }");
   });
 
   it("never emits rgba() in SVG output (SVG 1.1 compat)", () => {

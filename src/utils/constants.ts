@@ -9,6 +9,24 @@ import { Color } from "@raycast/api";
 import { AccountType, AssetType, SortField, SortDirection, SortOption } from "./types";
 
 // ──────────────────────────────────────────
+// App Color Palette (custom hexes)
+// ──────────────────────────────────────────
+
+export const APP_COLOR_PALETTE = {
+  mint: "#B9E3C6",
+  teal: "#59C9A5",
+  rose: "#D81E5B",
+  navy: "#23395B",
+  butter: "#FFFD98",
+} as const;
+
+/** Semantic colors for consistent UI accents */
+export const COLOR_PRIMARY: Color.ColorLike = APP_COLOR_PALETTE.navy;
+export const COLOR_MUTED: Color.ColorLike = APP_COLOR_PALETTE.mint;
+export const COLOR_WARNING: Color.ColorLike = APP_COLOR_PALETTE.butter;
+export const COLOR_DESTRUCTIVE: Color.ColorLike = APP_COLOR_PALETTE.rose;
+
+// ──────────────────────────────────────────
 // Account Type Display Labels
 // ──────────────────────────────────────────
 
@@ -32,19 +50,19 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export const ACCOUNT_TYPE_OPTIONS = Object.entries(ACCOUNT_TYPE_LABELS).map(([value, title]) => ({ value, title }));
 
 /** Colour-coded tags for each account type (used in section subtitles) */
-export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
-  [AccountType.ISA]: Color.Blue,
-  [AccountType.LISA]: Color.Purple,
-  [AccountType.SIPP]: Color.Orange,
-  [AccountType.GIA]: Color.Green,
-  [AccountType.BROKERAGE]: Color.Magenta,
-  [AccountType._401K]: Color.Yellow,
-  [AccountType.CRYPTO]: Color.Red,
-  [AccountType.CURRENT_ACCOUNT]: Color.Yellow,
-  [AccountType.SAVINGS_ACCOUNT]: Color.Green,
-  [AccountType.PROPERTY]: Color.Orange,
-  [AccountType.DEBT]: Color.Red,
-  [AccountType.OTHER]: Color.SecondaryText,
+export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color.ColorLike> = {
+  [AccountType.ISA]: APP_COLOR_PALETTE.teal,
+  [AccountType.LISA]: APP_COLOR_PALETTE.mint,
+  [AccountType.SIPP]: APP_COLOR_PALETTE.navy,
+  [AccountType.GIA]: APP_COLOR_PALETTE.teal,
+  [AccountType.BROKERAGE]: APP_COLOR_PALETTE.rose,
+  [AccountType._401K]: APP_COLOR_PALETTE.butter,
+  [AccountType.CRYPTO]: APP_COLOR_PALETTE.rose,
+  [AccountType.CURRENT_ACCOUNT]: APP_COLOR_PALETTE.mint,
+  [AccountType.SAVINGS_ACCOUNT]: APP_COLOR_PALETTE.teal,
+  [AccountType.PROPERTY]: APP_COLOR_PALETTE.navy,
+  [AccountType.DEBT]: APP_COLOR_PALETTE.rose,
+  [AccountType.OTHER]: APP_COLOR_PALETTE.navy,
 };
 
 // ──────────────────────────────────────────
@@ -193,13 +211,13 @@ export const UNITS_DECIMALS = 4;
 export const PERCENT_DECIMALS = 2;
 
 /** Colour used for positive changes / gains */
-export const COLOR_POSITIVE: Color = Color.Green;
+export const COLOR_POSITIVE: Color.ColorLike = APP_COLOR_PALETTE.teal;
 
 /** Colour used for negative changes / losses */
-export const COLOR_NEGATIVE: Color = Color.Red;
+export const COLOR_NEGATIVE: Color.ColorLike = APP_COLOR_PALETTE.rose;
 
 /** Colour used for neutral / zero changes */
-export const COLOR_NEUTRAL: Color = Color.SecondaryText;
+export const COLOR_NEUTRAL: Color.ColorLike = APP_COLOR_PALETTE.navy;
 
 // ──────────────────────────────────────────
 // Sorting Configuration

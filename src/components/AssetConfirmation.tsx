@@ -41,7 +41,7 @@ import { useAssetPrice } from "../hooks/useAssetPrice";
 import { validateUnits, parseUnits, validateAssetName, validatePrice } from "../utils/validation";
 import { formatCurrency, formatPercent } from "../utils/formatting";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
-import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL } from "../utils/constants";
+import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL, COLOR_PRIMARY } from "../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -220,7 +220,7 @@ export function AssetConfirmation({
                 title="Estimated Value"
                 text={{
                   value: formatCurrency(estimatedTotal, price.currency),
-                  color: Color.PrimaryText,
+                  color: COLOR_PRIMARY,
                 }}
               />
             </>

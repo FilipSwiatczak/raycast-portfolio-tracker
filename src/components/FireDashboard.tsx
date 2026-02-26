@@ -41,7 +41,6 @@ import {
   Action,
   Alert,
   Icon,
-  Color,
   useNavigation,
   confirmAlert,
   environment,
@@ -69,6 +68,14 @@ import {
 } from "../utils/fire-charts";
 import { getDisplayName } from "../utils/formatting";
 import { formatCurrency } from "../utils/formatting";
+import {
+  COLOR_POSITIVE,
+  COLOR_NEGATIVE,
+  COLOR_NEUTRAL,
+  COLOR_PRIMARY,
+  COLOR_WARNING,
+  COLOR_DESTRUCTIVE,
+} from "../utils/constants";
 import { writeSvgToTempFile, saveSvgToDownloads } from "../utils/fire-chart-export";
 import { FireSetup } from "./FireSetup";
 import { FireContributions } from "./FireContributions";
@@ -325,7 +332,7 @@ export function FireDashboard({
     const confirmed = await confirmAlert({
       title: "Reset FIRE Settings?",
       message: "This will remove all FIRE configuration including contributions. You'll need to set up FIRE again.",
-      icon: { source: Icon.Trash, tintColor: Color.Red },
+      icon: { source: Icon.Trash, tintColor: COLOR_DESTRUCTIVE },
       primaryAction: {
         title: "Reset Everything",
         style: Alert.ActionStyle.Destructive,
@@ -371,7 +378,7 @@ export function FireDashboard({
               title="Progress"
               text={{
                 value: `${Math.min(100, Math.round((includedPortfolioValue / settings.targetValue) * 100))}%`,
-                color: includedPortfolioValue >= settings.targetValue ? Color.Green : Color.Blue,
+                color: includedPortfolioValue >= settings.targetValue ? COLOR_POSITIVE : COLOR_PRIMARY,
               }}
             />
           )}
@@ -384,7 +391,7 @@ export function FireDashboard({
               title="🔥 FIRE Year"
               text={{
                 value: String(projection.fireYear),
-                color: Color.Green,
+                color: COLOR_POSITIVE,
               }}
             />
           )}
@@ -413,7 +420,7 @@ export function FireDashboard({
               title="⚠️ FIRE Year"
               text={{
                 value: "Not within 30 years",
-                color: Color.Orange,
+                color: COLOR_WARNING,
               }}
             />
           )}
@@ -447,7 +454,7 @@ export function FireDashboard({
             title="Real Return"
             text={{
               value: `${realRate.toFixed(1)}%`,
-              color: realRate > 0 ? Color.Green : realRate < 0 ? Color.Red : Color.SecondaryText,
+              color: realRate > 0 ? COLOR_POSITIVE : realRate < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL,
             }}
           />
           <Detail.Metadata.Label title="Withdrawal Rate" text={`${settings.withdrawalRate}%`} />

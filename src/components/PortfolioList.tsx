@@ -26,7 +26,7 @@
  */
 
 import React, { useState, useMemo } from "react";
-import { ActionPanel, Action, Color, Icon, List } from "@raycast/api";
+import { ActionPanel, Action, Icon, List } from "@raycast/api";
 import {
   Portfolio,
   PortfolioValuation,
@@ -42,7 +42,16 @@ import {
   isDebtAssetType,
 } from "../utils/types";
 import { formatCurrency, formatCurrencyCompact, formatRelativeTime, getDisplayName } from "../utils/formatting";
-import { ACCOUNT_TYPE_LABELS, ACCOUNT_TYPE_COLORS, SORT_OPTIONS, DEFAULT_SORT_KEY } from "../utils/constants";
+import {
+  ACCOUNT_TYPE_LABELS,
+  ACCOUNT_TYPE_COLORS,
+  SORT_OPTIONS,
+  DEFAULT_SORT_KEY,
+  COLOR_PRIMARY,
+  COLOR_WARNING,
+  COLOR_DESTRUCTIVE,
+  COLOR_NEUTRAL,
+} from "../utils/constants";
 import { hasSampleAccounts } from "../utils/sample-portfolio";
 
 import { EmptyPortfolio } from "./EmptyPortfolio";
@@ -241,7 +250,7 @@ export function PortfolioList({
       {showSampleBanner && (
         <List.Section title="👋 Sample Portfolio">
           <List.Item
-            icon={{ source: Icon.Info, tintColor: Color.Blue }}
+            icon={{ source: Icon.Info, tintColor: COLOR_PRIMARY }}
             title="You're viewing sample data"
             subtitle="This demo portfolio shows how the extension works."
             keywords={["sample", "demo", "preview"]}
@@ -269,7 +278,7 @@ export function PortfolioList({
       {isOffline && (
         <List.Section title="⚠️ Offline">
           <List.Item
-            icon={{ source: Icon.WifiDisabled, tintColor: Color.Orange }}
+            icon={{ source: Icon.WifiDisabled, tintColor: COLOR_WARNING }}
             title="Unable to fetch latest prices"
             subtitle="Showing cached data. Will retry automatically."
             actions={
@@ -294,7 +303,7 @@ export function PortfolioList({
             .map((error, index) => (
               <List.Item
                 key={`error-${index}`}
-                icon={{ source: Icon.ExclamationMark, tintColor: Color.Red }}
+                icon={{ source: Icon.ExclamationMark, tintColor: COLOR_DESTRUCTIVE }}
                 title={error.symbol ? `Error fetching ${error.symbol}` : "API Error"}
                 subtitle={error.message}
                 accessories={[
@@ -432,7 +441,7 @@ function AccountSection({
   // ── Account Type Tag ──
 
   const typeLabel = ACCOUNT_TYPE_LABELS[account.type] ?? account.type;
-  const typeColor = ACCOUNT_TYPE_COLORS[account.type] ?? Color.SecondaryText;
+  const typeColor = ACCOUNT_TYPE_COLORS[account.type] ?? COLOR_NEUTRAL;
 
   // Section subtitle: [Type Tag] · £12.3K · 4 positions
   const positionCount = positions.length;
@@ -564,7 +573,7 @@ function AccountSection({
                     tag: { value: typeLabel, color: typeColor },
                   },
                   {
-                    text: { value: formatCurrency(totalBaseValue, baseCurrency), color: Color.PrimaryText },
+                    text: { value: formatCurrency(totalBaseValue, baseCurrency), color: COLOR_PRIMARY },
                     tooltip: `${account.name} total value`,
                   },
                 ]

@@ -27,9 +27,9 @@
  */
 
 import React from "react";
-import { Action, ActionPanel, Alert, Color, Icon, confirmAlert } from "@raycast/api";
+import { Action, ActionPanel, Alert, Icon, confirmAlert } from "@raycast/api";
 import { Account, isPropertyAccountType, isDebtAccountType } from "../../utils/types";
-import { ACCOUNT_TYPE_LABELS } from "../../utils/constants";
+import { ACCOUNT_TYPE_LABELS, COLOR_DESTRUCTIVE } from "../../utils/constants";
 
 // ──────────────────────────────────────────
 // Props
@@ -112,7 +112,7 @@ export function AccountActions({
     const confirmed = await confirmAlert({
       title: `Delete "${account.name}"?`,
       message: `${positionWarning} This action cannot be undone.`,
-      icon: { source: Icon.Trash, tintColor: Color.Red },
+      icon: { source: Icon.Trash, tintColor: COLOR_DESTRUCTIVE },
       primaryAction: {
         title: "Delete Account",
         style: Alert.ActionStyle.Destructive,

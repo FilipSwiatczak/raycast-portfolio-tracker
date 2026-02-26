@@ -48,6 +48,7 @@ import {
   CsvRow,
   ExportPositionData,
 } from "../utils/csv-portfolio";
+import { COLOR_PRIMARY, COLOR_POSITIVE, COLOR_NEUTRAL, COLOR_WARNING, COLOR_DESTRUCTIVE } from "../utils/constants";
 import { writeFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -687,7 +688,7 @@ function ImportPreviewPhase({
       {/* ── Summary Row ── */}
       <List.Section title="Summary">
         <List.Item
-          icon={{ source: Icon.Document, tintColor: Color.Blue }}
+          icon={{ source: Icon.Document, tintColor: COLOR_PRIMARY }}
           title={summaryText}
           subtitle={`Source: ${sourceLabel}`}
           accessories={[{ text: `${selectedCount} selected`, icon: Icon.Checkmark }]}
@@ -740,8 +741,8 @@ function ImportPreviewPhase({
                 key={`pos-${index}`}
                 icon={
                   isSelected
-                    ? { source: Icon.Checkmark, tintColor: Color.Green }
-                    : { source: Icon.Circle, tintColor: Color.SecondaryText }
+                    ? { source: Icon.Checkmark, tintColor: COLOR_POSITIVE }
+                    : { source: Icon.Circle, tintColor: COLOR_NEUTRAL }
                 }
                 title={title}
                 subtitle={subtitle}
@@ -749,7 +750,7 @@ function ImportPreviewPhase({
                   ...(isDuplicate
                     ? [
                         {
-                          tag: { value: "duplicate", color: Color.Orange },
+                          tag: { value: "duplicate", color: COLOR_WARNING },
                           tooltip: `Already exists in "${row.accountName}"`,
                         },
                       ]
@@ -805,7 +806,7 @@ function ImportPreviewPhase({
             return (
               <List.Item
                 key={`err-${index}`}
-                icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
+                icon={{ source: Icon.XMarkCircle, tintColor: COLOR_DESTRUCTIVE }}
                 title={`Row ${err.row}: ${err.message}${rawVal}`}
                 subtitle={err.column}
               />
@@ -821,7 +822,7 @@ function ImportPreviewPhase({
           {skipped.slice(0, 15).map((skip, index) => (
             <List.Item
               key={`skip-${index}`}
-              icon={{ source: Icon.ArrowRightCircle, tintColor: Color.SecondaryText }}
+              icon={{ source: Icon.ArrowRightCircle, tintColor: COLOR_NEUTRAL }}
               title={`Row ${skip.row}`}
               subtitle={skip.reason}
             />
