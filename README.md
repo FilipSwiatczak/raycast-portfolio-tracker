@@ -31,10 +31,9 @@ On first launch, a **sample portfolio** is automatically loaded so you can explo
 
 | Command | Description |
 |---|---|
-| **Portfolio Tracker** | View your portfolio, manage accounts and positions, track net worth |
+| **Portfolio Tracker** | View your portfolio, manage accounts and positions, track net worth. Import/Export via CSV is available from the action menu (⌘⇧I). |
 | **Search Investments** | Find stocks, ETFs, and funds to add to your portfolio |
 | **FIRE Dashboard** | Project your path to financial independence with visual charts |
-| **Import/Export Portfolio** | Back up or migrate your portfolio via CSV |
 
 ### Preferences
 

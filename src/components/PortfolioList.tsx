@@ -133,6 +133,9 @@ export interface PortfolioListProps {
   /** Refresh all prices and FX rates */
   onRefresh: () => void;
 
+  /** Navigate to the Import/Export view for CSV backup and restore */
+  onImportExport?: () => void;
+
   /** Navigate to the standalone "Search Investments" command */
   onSearchInvestments?: () => void;
 
@@ -169,6 +172,7 @@ export function PortfolioList({
   onAddUnits,
   onDeletePosition,
   onRefresh,
+  onImportExport,
   onSearchInvestments,
   onLoadSample,
   onRemoveSample,
@@ -251,7 +255,9 @@ export function PortfolioList({
       searchBarAccessory={searchBarAccessory}
     >
       {/* ── Empty State ── */}
-      {!isLoading && !hasAccounts && <EmptyPortfolio onAddAccount={onAddAccount} onLoadSample={onLoadSample} />}
+      {!isLoading && !hasAccounts && (
+        <EmptyPortfolio onAddAccount={onAddAccount} onLoadSample={onLoadSample} onImportExport={onImportExport} />
+      )}
 
       {/* ── Sample Portfolio Banner ── */}
       {showSampleBanner && (
@@ -272,6 +278,7 @@ export function PortfolioList({
                 <PortfolioActions
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
+                  onImportExport={onImportExport}
                   onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
                   toggleDetailAction={toggleDetailAction}
                 />
@@ -293,6 +300,7 @@ export function PortfolioList({
                 <PortfolioActions
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
+                  onImportExport={onImportExport}
                   onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
                   toggleDetailAction={toggleDetailAction}
                 />
@@ -324,6 +332,7 @@ export function PortfolioList({
                     <PortfolioActions
                       onAddAccount={onAddAccount}
                       onRefresh={onRefresh}
+                      onImportExport={onImportExport}
                       onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
                       toggleDetailAction={toggleDetailAction}
                     />
@@ -361,6 +370,7 @@ export function PortfolioList({
           onAddUnits={onAddUnits}
           onDeletePosition={onDeletePosition}
           onRefresh={onRefresh}
+          onImportExport={onImportExport}
           onSearchInvestments={onSearchInvestments}
         />
       ))}
@@ -425,6 +435,7 @@ export function PortfolioList({
                 <PortfolioActions
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
+                  onImportExport={onImportExport}
                   onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
                   toggleDetailAction={toggleDetailAction}
                 />
@@ -448,6 +459,7 @@ export function PortfolioList({
             onAddPosition={onAddPosition}
             onAddCash={onAddCash}
             onRefresh={onRefresh}
+            onImportExport={onImportExport}
             onSearchInvestments={onSearchInvestments}
           />
         ))}
@@ -483,6 +495,7 @@ interface AccountSectionProps {
   onAddUnits: (account: Account, position: Position) => void;
   onDeletePosition: (accountId: string, positionId: string) => Promise<void>;
   onRefresh: () => void;
+  onImportExport?: () => void;
   onSearchInvestments?: () => void;
 }
 
@@ -510,6 +523,7 @@ function AccountSection({
   onAddUnits,
   onDeletePosition,
   onRefresh,
+  onImportExport,
   onSearchInvestments,
 }: AccountSectionProps): React.JSX.Element {
   const { account, positions, totalBaseValue } = accountValuation;
@@ -566,6 +580,7 @@ function AccountSection({
               <PortfolioActions
                 onAddAccount={onAddAccount}
                 onRefresh={onRefresh}
+                onImportExport={onImportExport}
                 onSearchInvestments={onSearchInvestments}
                 toggleDetailAction={toggleDetailAction}
               />
@@ -624,6 +639,7 @@ function AccountSection({
                 <PortfolioActions
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
+                  onImportExport={onImportExport}
                   onSearchInvestments={onSearchInvestments}
                   toggleDetailAction={toggleDetailAction}
                 />
@@ -688,6 +704,7 @@ function AccountSection({
               <PortfolioActions
                 onAddAccount={onAddAccount}
                 onRefresh={onRefresh}
+                onImportExport={onImportExport}
                 onSearchInvestments={onSearchInvestments}
                 toggleDetailAction={toggleDetailAction}
               />
@@ -714,6 +731,7 @@ interface FallbackAccountSectionProps {
   onAddPosition: (accountId: string) => void;
   onAddCash: (accountId: string) => void;
   onRefresh: () => void;
+  onImportExport?: () => void;
   onSearchInvestments?: () => void;
 }
 
@@ -727,6 +745,7 @@ function FallbackAccountSection({
   onAddPosition,
   onAddCash,
   onRefresh,
+  onImportExport,
   onSearchInvestments,
 }: FallbackAccountSectionProps): React.JSX.Element {
   // isShowingDetail is received to satisfy the prop contract but not used here
@@ -758,6 +777,7 @@ function FallbackAccountSection({
               <PortfolioActions
                 onAddAccount={onAddAccount}
                 onRefresh={onRefresh}
+                onImportExport={onImportExport}
                 onSearchInvestments={onSearchInvestments}
                 toggleDetailAction={toggleDetailAction}
               />
@@ -784,6 +804,7 @@ function FallbackAccountSection({
                 <PortfolioActions
                   onAddAccount={onAddAccount}
                   onRefresh={onRefresh}
+                  onImportExport={onImportExport}
                   onSearchInvestments={onSearchInvestments}
                   toggleDetailAction={toggleDetailAction}
                 />

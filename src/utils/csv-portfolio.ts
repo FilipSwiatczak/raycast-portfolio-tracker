@@ -30,7 +30,17 @@
  * @module csv-portfolio
  */
 
-import { Portfolio, Account, Position, AccountType, AssetType, MortgageData, DebtData } from "./types";
+import {
+  Portfolio,
+  Account,
+  Position,
+  AccountType,
+  AssetType,
+  MortgageData,
+  DebtData,
+  isPropertyAssetType,
+  isDebtAssetType,
+} from "./types";
 import { generateId } from "./uuid";
 
 // ──────────────────────────────────────────
@@ -812,6 +822,14 @@ export function buildPortfolioFromCsvRows(rows: CsvRow[]): CsvImportResult {
     // Parse additional parameters for specialised position types
     const { mortgageData, debtData } = parseAdditionalParameters(row.additionalParameters, assetType);
 
+    // Market-traded assets (EQUITY, ETF, MUTUALFUND, etc.) must NOT get a
+    // priceOverride from the CSV — they should fetch live prices from Yahoo
+    // Finance so that Day Change works correctly. Only non-market asset types
+    // (which don't call Yahoo Finance) retain the CSV price as an override.
+    const isMarketTraded =
+      !isPropertyAssetType(assetType) && !isDebtAssetType(assetType) && assetType !== AssetType.CASH;
+    const priceOverride = !isMarketTraded && row.price > 0 ? row.price : undefined;
+
     const position: Position = {
       id: generateId(),
       symbol: row.symbol,
@@ -819,7 +837,7 @@ export function buildPortfolioFromCsvRows(rows: CsvRow[]): CsvImportResult {
       units: row.units,
       currency: row.currency,
       assetType,
-      priceOverride: row.price > 0 ? row.price : undefined,
+      priceOverride,
       addedAt: row.lastUpdated || new Date().toISOString(),
       ...(mortgageData ? { mortgageData } : {}),
       ...(debtData ? { debtData } : {}),

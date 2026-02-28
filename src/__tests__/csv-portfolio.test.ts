@@ -925,7 +925,7 @@ describe("buildPortfolioFromCsvRows", () => {
     expect(account.id).not.toBe(account.positions[0].id);
   });
 
-  it("sets priceOverride when price > 0", () => {
+  it("does not set priceOverride for market-traded assets even when price > 0", () => {
     const rows: CsvRow[] = [
       {
         accountName: "ISA",
@@ -942,7 +942,30 @@ describe("buildPortfolioFromCsvRows", () => {
     ];
 
     const result = buildPortfolioFromCsvRows(rows);
-    expect(result.portfolio.accounts[0].positions[0].priceOverride).toBe(99.5);
+    // Market-traded assets (ETF) should NOT get priceOverride — they use live
+    // Yahoo Finance prices so that Day Change works correctly.
+    expect(result.portfolio.accounts[0].positions[0].priceOverride).toBeUndefined();
+  });
+
+  it("sets priceOverride for non-market asset types (CASH)", () => {
+    const rows: CsvRow[] = [
+      {
+        accountName: "Savings",
+        accountType: "SAVINGS_ACCOUNT",
+        assetName: "GBP Cash",
+        symbol: "GBP",
+        units: 5000,
+        price: 1,
+        totalValue: 5000,
+        currency: "GBP",
+        assetType: "CASH",
+        lastUpdated: "2024-01-01",
+      },
+    ];
+
+    const result = buildPortfolioFromCsvRows(rows);
+    // Non-market asset types retain priceOverride since they don't use Yahoo Finance
+    expect(result.portfolio.accounts[0].positions[0].priceOverride).toBe(1);
   });
 
   it("does not set priceOverride when price is 0", () => {
@@ -1349,7 +1372,9 @@ describe("round-trip: export → import", () => {
     expect(vusa!.units).toBe(50);
     expect(vusa!.currency).toBe("GBP");
     expect(vusa!.assetType).toBe(AssetType.ETF);
-    expect(vusa!.priceOverride).toBe(72.45);
+    // Market-traded assets should NOT get priceOverride on import — they
+    // fetch live prices from Yahoo Finance so Day Change works correctly.
+    expect(vusa!.priceOverride).toBeUndefined();
 
     const importedBrokerage = importResult.portfolio.accounts.find((a) => a.name === "Brokerage");
     expect(importedBrokerage).toBeDefined();

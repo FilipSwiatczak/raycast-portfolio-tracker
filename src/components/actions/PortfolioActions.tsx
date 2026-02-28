@@ -41,6 +41,12 @@ interface PortfolioActionsProps {
   onSearchInvestments?: () => void;
 
   /**
+   * Callback to navigate to the Import/Export view.
+   * Allows CSV backup and restore from within the Portfolio Tracker command.
+   */
+  onImportExport?: () => void;
+
+  /**
    * Pre-built Action element that toggles the detail panel on/off.
    * Passed from the parent so the toggle state is managed in one place.
    * Rendered inside the "View" section.
@@ -59,18 +65,21 @@ interface PortfolioActionsProps {
  * 1. Add Account — navigates to the AccountForm in create mode
  * 2. Search Investments — navigates to the search view (if accounts exist)
  * 3. Refresh Prices — re-fetches all prices and FX rates, clearing daily cache
- * 4. Toggle Detail Panel — shows/hides the split-pane detail view (⌘D)
+ * 4. Import / Export Portfolio — navigates to CSV import/export view
+ * 5. Toggle Detail Panel — shows/hides the split-pane detail view (⌘D)
  *
  * Keyboard shortcuts:
  * - ⌘N → Add Account
  * - ⌘F → Search Investments
  * - ⌘R → Refresh Prices
+ * - ⌘⇧I → Import / Export Portfolio
  * - ⌘D → Toggle Detail Panel (handled by the passed-in action element)
  */
 export function PortfolioActions({
   onAddAccount,
   onRefresh,
   onSearchInvestments,
+  onImportExport,
   toggleDetailAction,
 }: PortfolioActionsProps): React.JSX.Element {
   return (
@@ -98,6 +107,15 @@ export function PortfolioActions({
           shortcut={{ modifiers: ["cmd"], key: "r" }}
           onAction={onRefresh}
         />
+
+        {onImportExport && (
+          <Action
+            title="Import / Export Portfolio"
+            icon={Icon.Switch}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+            onAction={onImportExport}
+          />
+        )}
       </ActionPanel.Section>
 
       {toggleDetailAction && <ActionPanel.Section title="View">{toggleDetailAction}</ActionPanel.Section>}

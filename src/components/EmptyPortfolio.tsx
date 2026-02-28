@@ -31,6 +31,9 @@ interface EmptyPortfolioProps {
 
   /** Callback fired when the user chooses to load the sample portfolio */
   onLoadSample: () => void;
+
+  /** Callback fired when the user chooses to import a portfolio from CSV */
+  onImportExport?: () => void;
 }
 
 // ──────────────────────────────────────────
@@ -44,15 +47,24 @@ interface EmptyPortfolioProps {
  * and actions to either create the first account or preview
  * a sample portfolio.
  */
-export function EmptyPortfolio({ onAddAccount, onLoadSample }: EmptyPortfolioProps): React.JSX.Element {
+export function EmptyPortfolio({ onAddAccount, onLoadSample, onImportExport }: EmptyPortfolioProps): React.JSX.Element {
+  const description: string = `Add ISAs, SIPPs, brokerages, Property, Crypto or Debt.\nPress: ⏎ Add | ⌘S Sample Portfolio | ⌘⇧I Import`;
   return (
     <List.EmptyView
       icon={Icon.BarChart}
       title="Welcome to Portfolio Tracker"
-      description="Add your first investment account to start tracking your net worth. You can create accounts for ISAs, SIPPs, brokerages, and more.\n\nOr preview with a sample portfolio to see how it works."
+      description={description}
       actions={
         <ActionPanel>
           <Action title="Add Account" icon={Icon.PlusCircle} onAction={onAddAccount} />
+          {onImportExport && (
+            <Action
+              title="Import Portfolio"
+              icon={Icon.Download}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+              onAction={onImportExport}
+            />
+          )}
           <Action
             title="See Sample Portfolio"
             icon={Icon.Eye}

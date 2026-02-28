@@ -20,6 +20,7 @@ import { useNavigation, updateCommandMetadata, showToast, Toast, LocalStorage } 
 import { usePortfolio } from "./hooks/usePortfolio";
 import { usePortfolioValue } from "./hooks/usePortfolioValue";
 import { PortfolioList } from "./components/PortfolioList";
+import { ImportExportView } from "./components/ImportExportView";
 import { AccountForm } from "./components/AccountForm";
 import { EditPositionForm } from "./components/EditPositionForm";
 import { AddUnitsForm } from "./components/AddUnitsForm";
@@ -409,6 +410,24 @@ export default function PortfolioCommand(): React.JSX.Element {
     refreshPrices();
   }
 
+  function handleImportExport(): void {
+    push(
+      <ImportExportView
+        portfolio={portfolio}
+        valuation={valuation}
+        baseCurrency={baseCurrency}
+        isLoading={isLoading}
+        onMergeAccounts={async (accounts) => {
+          await mergeAccounts(accounts);
+        }}
+        onRevalidate={() => {
+          revalidatePortfolio();
+          refreshPrices();
+        }}
+      />,
+    );
+  }
+
   function handleSearchInvestments(): void {
     // Use the full SearchInvestmentsFlow: search first, then pick an account,
     // then confirm details — no account is assumed up front.
@@ -504,6 +523,7 @@ export default function PortfolioCommand(): React.JSX.Element {
       onAddUnits={handleAddUnits}
       onDeletePosition={handleDeletePosition}
       onRefresh={handleRefresh}
+      onImportExport={handleImportExport}
       onSearchInvestments={(portfolio?.accounts.length ?? 0) > 0 ? handleSearchInvestments : undefined}
       onLoadSample={handleLoadSample}
       onRemoveSample={handleRemoveSample}
