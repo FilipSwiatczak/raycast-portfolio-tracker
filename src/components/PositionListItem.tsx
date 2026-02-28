@@ -665,10 +665,12 @@ function buildDebtDetail({
           )}
 
           {/* ── Value in Portfolio ── */}
-          <List.Item.Detail.Metadata.Label
-            title="Portfolio Impact"
-            text={formatCurrency(totalBaseValue, baseCurrency)}
-          />
+          <List.Item.Detail.Metadata.TagList title="Portfolio Impact">
+            <List.Item.Detail.Metadata.TagList.Item
+              text={formatCurrency(totalBaseValue, baseCurrency)}
+              color={isPaidOff ? COLOR_NEUTRAL : COLOR_NEGATIVE}
+            />
+          </List.Item.Detail.Metadata.TagList>
 
           {isCrossCurrency && (
             <List.Item.Detail.Metadata.Label
@@ -793,10 +795,9 @@ function buildPropertyDetail({
           {/* ── Property Info ── */}
           <List.Item.Detail.Metadata.Label title="Property" text={displayName} />
           {isRenamed && (
-            <List.Item.Detail.Metadata.Label
-              title="Original Name"
-              text={{ value: position.name, color: COLOR_MUTED }}
-            />
+            <List.Item.Detail.Metadata.TagList title="Original Name">
+              <List.Item.Detail.Metadata.TagList.Item text={position.name} color={COLOR_MUTED} />
+            </List.Item.Detail.Metadata.TagList>
           )}
           <List.Item.Detail.Metadata.TagList title="Type">
             <List.Item.Detail.Metadata.TagList.Item text={typeLabel} />
@@ -816,13 +817,12 @@ function buildPropertyDetail({
                 title="Original Valuation"
                 text={formatCurrency(md.totalPropertyValue, position.currency)}
               />
-              <List.Item.Detail.Metadata.Label
-                title="HPI Change"
-                text={{
-                  value: formatPercent(rawHPI),
-                  color: rawHPI > 0 ? COLOR_POSITIVE : rawHPI < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL,
-                }}
-              />
+              <List.Item.Detail.Metadata.TagList title="HPI Change">
+                <List.Item.Detail.Metadata.TagList.Item
+                  text={formatPercent(rawHPI)}
+                  color={rawHPI > 0 ? COLOR_POSITIVE : rawHPI < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL}
+                />
+              </List.Item.Detail.Metadata.TagList>
 
               <List.Item.Detail.Metadata.Separator />
 
@@ -835,22 +835,20 @@ function buildPropertyDetail({
                 text={formatCurrency(equityCalc.originalEquity, position.currency)}
               />
               {equityCalc.principalRepaid > 0 && (
-                <List.Item.Detail.Metadata.Label
-                  title="Principal Repaid"
-                  text={{
-                    value: `+${formatCurrency(equityCalc.principalRepaid, position.currency)}`,
-                    color: COLOR_POSITIVE,
-                  }}
-                />
+                <List.Item.Detail.Metadata.TagList title="Principal Repaid">
+                  <List.Item.Detail.Metadata.TagList.Item
+                    text={`+${formatCurrency(equityCalc.principalRepaid, position.currency)}`}
+                    color={COLOR_POSITIVE}
+                  />
+                </List.Item.Detail.Metadata.TagList>
               )}
               {equityCalc.appreciation !== 0 && (
-                <List.Item.Detail.Metadata.Label
-                  title="Market Appreciation"
-                  text={{
-                    value: formatCurrency(equityCalc.appreciation, position.currency, { showSign: true }),
-                    color: equityCalc.appreciation > 0 ? COLOR_POSITIVE : COLOR_NEGATIVE,
-                  }}
-                />
+                <List.Item.Detail.Metadata.TagList title="Market Appreciation">
+                  <List.Item.Detail.Metadata.TagList.Item
+                    text={formatCurrency(equityCalc.appreciation, position.currency, { showSign: true })}
+                    color={equityCalc.appreciation > 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}
+                  />
+                </List.Item.Detail.Metadata.TagList>
               )}
               {equityCalc.outstandingBalance > 0 && (
                 <List.Item.Detail.Metadata.Label
@@ -873,34 +871,34 @@ function buildPropertyDetail({
                       text={formatCurrency(equityCalc.myEquityShare, position.currency)}
                     />
                   )}
-                  <List.Item.Detail.Metadata.Label
-                    title="Net Change"
-                    text={{
-                      value: formatCurrency(equityCalc.netChange, position.currency, { showSign: true }),
-                      color:
+                  <List.Item.Detail.Metadata.TagList title="Net Change">
+                    <List.Item.Detail.Metadata.TagList.Item
+                      text={formatCurrency(equityCalc.netChange, position.currency, { showSign: true })}
+                      color={
                         equityCalc.netChange > 0
                           ? COLOR_POSITIVE
                           : equityCalc.netChange < 0
                             ? COLOR_NEGATIVE
-                            : COLOR_NEUTRAL,
-                    }}
-                  />
-                  <List.Item.Detail.Metadata.Label
-                    title="My Share of Change"
-                    text={{
-                      value: formatCurrency(
+                            : COLOR_NEUTRAL
+                      }
+                    />
+                  </List.Item.Detail.Metadata.TagList>
+                  <List.Item.Detail.Metadata.TagList title="My Share of Change">
+                    <List.Item.Detail.Metadata.TagList.Item
+                      text={formatCurrency(
                         (equityCalc.netChange * equityCalc.sharedOwnershipPercent) / 100,
                         position.currency,
                         { showSign: true },
-                      ),
-                      color:
+                      )}
+                      color={
                         equityCalc.netChange > 0
                           ? COLOR_POSITIVE
                           : equityCalc.netChange < 0
                             ? COLOR_NEGATIVE
-                            : COLOR_NEUTRAL,
-                    }}
-                  />
+                            : COLOR_NEUTRAL
+                      }
+                    />
+                  </List.Item.Detail.Metadata.TagList>
                   <List.Item.Detail.Metadata.Label
                     title="Your Equity"
                     text={formatCurrency(equityCalc.adjustedEquity, position.currency)}
@@ -996,10 +994,9 @@ function buildSecuritiesDetail({
           {/* ── Asset Info ── */}
           <List.Item.Detail.Metadata.Label title="Asset" text={displayName} />
           {isRenamed && (
-            <List.Item.Detail.Metadata.Label
-              title="Original Name"
-              text={{ value: position.name, color: COLOR_MUTED }}
-            />
+            <List.Item.Detail.Metadata.TagList title="Original Name">
+              <List.Item.Detail.Metadata.TagList.Item text={position.name} color={COLOR_MUTED} />
+            </List.Item.Detail.Metadata.TagList>
           )}
           <List.Item.Detail.Metadata.Label title="Symbol" text={position.symbol} />
           <List.Item.Detail.Metadata.TagList title="Type">
@@ -1015,16 +1012,17 @@ function buildSecuritiesDetail({
                 title="Current Price"
                 text={formatCurrency(currentPrice, position.currency)}
               />
-              <List.Item.Detail.Metadata.Label
-                title="Day Change"
-                text={{
-                  value: `${formatCurrency(change, position.currency, { showSign: true })} (${formatPercent(changePercent)})`,
-                  color: changeColor,
-                }}
-              />
+              <List.Item.Detail.Metadata.TagList title="Day Change">
+                <List.Item.Detail.Metadata.TagList.Item
+                  text={`${formatCurrency(change, position.currency, { showSign: true })} (${formatPercent(changePercent)})`}
+                  color={changeColor}
+                />
+              </List.Item.Detail.Metadata.TagList>
             </>
           ) : (
-            <List.Item.Detail.Metadata.Label title="Price" text={{ value: "Unavailable", color: COLOR_MUTED }} />
+            <List.Item.Detail.Metadata.TagList title="Price">
+              <List.Item.Detail.Metadata.TagList.Item text="Unavailable" color={COLOR_MUTED} />
+            </List.Item.Detail.Metadata.TagList>
           )}
 
           <List.Item.Detail.Metadata.Separator />

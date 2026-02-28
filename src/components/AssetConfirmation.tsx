@@ -198,13 +198,12 @@ export function AssetConfirmation({
               {/* ── Price Info ── */}
               <Detail.Metadata.Label title="Current Price" text={formatCurrency(price.price, price.currency)} />
               <Detail.Metadata.Label title="Currency" text={price.currency} />
-              <Detail.Metadata.Label
-                title="Day Change"
-                text={{
-                  value: `${formatCurrency(price.change, price.currency, { showSign: true })} (${formatPercent(price.changePercent)})`,
-                  color: changeColor,
-                }}
-              />
+              <Detail.Metadata.TagList title="Day Change">
+                <Detail.Metadata.TagList.Item
+                  text={`${formatCurrency(price.change, price.currency, { showSign: true })} (${formatPercent(price.changePercent)})`}
+                  color={changeColor}
+                />
+              </Detail.Metadata.TagList>
             </>
           )}
 
@@ -216,13 +215,12 @@ export function AssetConfirmation({
           {parsedUnits > 0 && price && (
             <>
               <Detail.Metadata.Label title="Units" text={String(parsedUnits)} />
-              <Detail.Metadata.Label
-                title="Estimated Value"
-                text={{
-                  value: formatCurrency(estimatedTotal, price.currency),
-                  color: COLOR_PRIMARY,
-                }}
-              />
+              <Detail.Metadata.TagList title="Estimated Value">
+                <Detail.Metadata.TagList.Item
+                  text={formatCurrency(estimatedTotal, price.currency)}
+                  color={COLOR_PRIMARY}
+                />
+              </Detail.Metadata.TagList>
             </>
           )}
         </Detail.Metadata>

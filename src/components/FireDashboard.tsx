@@ -374,26 +374,21 @@ export function FireDashboard({
           <Detail.Metadata.Label title="FIRE Target" text={formatCurrency(settings.targetValue, baseCurrency)} />
 
           {includedPortfolioValue > 0 && settings.targetValue > 0 && (
-            <Detail.Metadata.Label
-              title="Progress"
-              text={{
-                value: `${Math.min(100, Math.round((includedPortfolioValue / settings.targetValue) * 100))}%`,
-                color: includedPortfolioValue >= settings.targetValue ? COLOR_POSITIVE : COLOR_PRIMARY,
-              }}
-            />
+            <Detail.Metadata.TagList title="Progress">
+              <Detail.Metadata.TagList.Item
+                text={`${Math.min(100, Math.round((includedPortfolioValue / settings.targetValue) * 100))}%`}
+                color={includedPortfolioValue >= settings.targetValue ? COLOR_POSITIVE : COLOR_PRIMARY}
+              />
+            </Detail.Metadata.TagList>
           )}
 
           <Detail.Metadata.Separator />
 
           {/* ── FIRE Target Date ── */}
           {projection.targetHitInWindow && (
-            <Detail.Metadata.Label
-              title="🔥 FIRE Year"
-              text={{
-                value: String(projection.fireYear),
-                color: COLOR_POSITIVE,
-              }}
-            />
+            <Detail.Metadata.TagList title="🔥 FIRE Year">
+              <Detail.Metadata.TagList.Item text={String(projection.fireYear)} color={COLOR_POSITIVE} />
+            </Detail.Metadata.TagList>
           )}
           {projection.targetHitInWindow && <Detail.Metadata.Label title="Age at FIRE" text={`${projection.fireAge}`} />}
           {projection.targetHitInWindow && (
@@ -416,13 +411,9 @@ export function FireDashboard({
             />
           )}
           {!projection.targetHitInWindow && (
-            <Detail.Metadata.Label
-              title="⚠️ FIRE Year"
-              text={{
-                value: "Not within 30 years",
-                color: COLOR_WARNING,
-              }}
-            />
+            <Detail.Metadata.TagList title="⚠️ FIRE Year">
+              <Detail.Metadata.TagList.Item text="Not within 30 years" color={COLOR_WARNING} />
+            </Detail.Metadata.TagList>
           )}
 
           <Detail.Metadata.Separator />
@@ -450,13 +441,12 @@ export function FireDashboard({
           {/* ── Assumptions ── */}
           <Detail.Metadata.Label title="Growth Rate" text={`${settings.annualGrowthRate}%`} />
           <Detail.Metadata.Label title="Inflation" text={`${settings.annualInflation}%`} />
-          <Detail.Metadata.Label
-            title="Real Return"
-            text={{
-              value: `${realRate.toFixed(1)}%`,
-              color: realRate > 0 ? COLOR_POSITIVE : realRate < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL,
-            }}
-          />
+          <Detail.Metadata.TagList title="Real Return">
+            <Detail.Metadata.TagList.Item
+              text={`${realRate.toFixed(1)}%`}
+              color={realRate > 0 ? COLOR_POSITIVE : realRate < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL}
+            />
+          </Detail.Metadata.TagList>
           <Detail.Metadata.Label title="Withdrawal Rate" text={`${settings.withdrawalRate}%`} />
 
           <Detail.Metadata.Separator />

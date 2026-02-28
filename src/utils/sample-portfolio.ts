@@ -13,10 +13,11 @@
  *
  * Accounts:
  *   - ISA          → ETF + Equity (UK-listed)
+ *   - SIPP         → Global tracker ETF + Cash (locked pension account)
  *   - Brokerage    → Equity + Cash (US-listed, cross-currency)
  *   - Savings      → Cash holding
  *   - Property     → Mortgage (with full params) + Owned Outright
- *   - Debt         → Credit Card + Loan (with loan term dates)
+ *   - Debt         → Credit Card + Loan + Student Loan (paid off)
  *
  * This ensures screenshots taken from the sample portfolio cover the full
  * breadth of the extension's features.
@@ -61,6 +62,32 @@ const SAMPLE_POSITIONS_ISA: Position[] = [
     currency: "GBP",
     assetType: AssetType.EQUITY,
     addedAt: "2024-06-01T14:00:00.000Z",
+  },
+];
+
+// ──────────────────────────────────────────
+// Sample Positions — SIPP (Global ETF + Cash, locked pension)
+// ──────────────────────────────────────────
+
+const SAMPLE_POSITIONS_SIPP: Position[] = [
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-vwrl`,
+    symbol: "VWRL.L",
+    name: "Vanguard FTSE All-World UCITS ETF",
+    units: 120,
+    currency: "GBP",
+    assetType: AssetType.ETF,
+    addedAt: "2023-04-01T09:00:00.000Z",
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-cash-sipp`,
+    symbol: "CASH:GBP",
+    name: "SIPP Cash Reserve",
+    units: 1500,
+    currency: "GBP",
+    assetType: AssetType.CASH,
+    priceOverride: 1,
+    addedAt: "2023-04-01T09:00:00.000Z",
   },
 ];
 
@@ -189,8 +216,18 @@ const SAMPLE_POSITIONS_DEBT: Position[] = [
     name: "Car Loan",
     units: 1,
     currency: "GBP",
-    assetType: AssetType.LOAN,
+    assetType: AssetType.AUTO_LOAN,
     debtData: SAMPLE_LOAN_DATA,
+    addedAt: "2024-01-15T00:00:00.000Z",
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-sloan`,
+    symbol: "DEBT:STUDENT_LOAN",
+    name: "Student Loan",
+    units: 1,
+    currency: "GBP",
+    assetType: AssetType.STUDENT_LOAN,
+    debtData: { ...SAMPLE_LOAN_DATA, paidOff: true, currentBalance: 20000 },
     addedAt: "2024-01-15T00:00:00.000Z",
   },
 ];
@@ -202,20 +239,22 @@ const SAMPLE_POSITIONS_DEBT: Position[] = [
 /**
  * Pre-built sample accounts ready to be merged into a portfolio.
  *
- * Contains five accounts covering every supported account and position type:
+ * Contains six accounts covering every supported account and position type:
  *
- * | Account            | Type            | Positions                          |
- * |--------------------|-----------------|------------------------------------|
- * | Sample ISA         | ISA             | ETF (VUSA.L) + Equity (AZN.L)     |
- * | Sample Brokerage   | BROKERAGE       | Equity (AAPL) + Cash (USD)         |
- * | Sample Savings     | SAVINGS_ACCOUNT | Cash (GBP)                         |
- * | Sample Property    | PROPERTY        | Mortgage + Owned Outright          |
- * | Sample Debts       | DEBT            | Credit Card + Loan                 |
+ * | Account            | Type            | Positions                                |
+ * |--------------------|-----------------|------------------------------------------|
+ * | Sample ISA         | ISA             | ETF (VUSA.L) + Equity (AZN.L)           |
+ * | Sample SIPP        | SIPP            | ETF (VWRL.L) + Cash (GBP)               |
+ * | Sample Brokerage   | BROKERAGE       | Equity (AAPL) + Cash (USD)               |
+ * | Sample Savings     | SAVINGS_ACCOUNT | Cash (GBP)                               |
+ * | Sample Property    | PROPERTY        | Mortgage + Owned Outright                |
+ * | Sample Debts       | DEBT            | Credit Card + Loan + Student Loan (paid) |
  *
  * This gives the user a realistic multi-account, cross-currency preview
  * that exercises all display features: FX conversion, GBp normalisation,
  * cash holdings, property HPI appreciation, mortgage calculations,
- * debt tracking with amortisation, and multiple asset types.
+ * debt tracking with amortisation, locked pension accounts (for FIRE
+ * dashboard split visualisation), and multiple asset types.
  */
 export const SAMPLE_ACCOUNTS: Account[] = [
   {
@@ -224,6 +263,13 @@ export const SAMPLE_ACCOUNTS: Account[] = [
     type: AccountType.ISA,
     createdAt: new Date().toISOString(),
     positions: SAMPLE_POSITIONS_ISA,
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}acc-sipp`,
+    name: "Sample SIPP",
+    type: AccountType.SIPP,
+    createdAt: new Date().toISOString(),
+    positions: SAMPLE_POSITIONS_SIPP,
   },
   {
     id: `${SAMPLE_ID_PREFIX}acc-brokerage`,
