@@ -42,6 +42,7 @@ import {
   isDebtAssetType,
 } from "../utils/types";
 import { formatCurrency, formatCurrencyCompact, formatRelativeTime, getDisplayName } from "../utils/formatting";
+import { isDebtAccountType } from "../utils/types";
 import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_TYPE_COLORS,
@@ -51,6 +52,8 @@ import {
   COLOR_WARNING,
   COLOR_DESTRUCTIVE,
   COLOR_NEUTRAL,
+  COLOR_POSITIVE,
+  COLOR_NEGATIVE,
 } from "../utils/constants";
 import { hasSampleAccounts } from "../utils/sample-portfolio";
 
@@ -192,6 +195,12 @@ export function PortfolioList({
 
   // ── Navigation Title ──
 
+  const navTitle = buildNavigationTitle(valuation, isLoading);
+
+  // ── Portfolio Totals (assets vs liabilities) ──
+
+  const portfolioTotals = buildPortfolioTotals(valuation);
+
   // ── Offline / Error Indicator ──
 
   const isOffline = errors.length > 0 && errors.every((e) => e.type === ErrorType.OFFLINE);
@@ -237,6 +246,7 @@ export function PortfolioList({
     <List
       isLoading={isLoading}
       isShowingDetail={isShowingDetail && hasPositions}
+      navigationTitle={navTitle}
       searchBarPlaceholder={searchPlaceholder}
       searchBarAccessory={searchBarAccessory}
     >
@@ -354,6 +364,75 @@ export function PortfolioList({
           onSearchInvestments={onSearchInvestments}
         />
       ))}
+
+      {/* ── Portfolio Summary Row ── */}
+      {valuation && hasPositions && portfolioTotals && (
+        <List.Section title="Summary">
+          <List.Item
+            icon={Icon.Calculator}
+            title="Portfolio Total ∑"
+            accessories={
+              isShowingDetail
+                ? []
+                : [
+                    {
+                      tag: {
+                        value: `Assets: ${formatCurrency(portfolioTotals.assets, valuation.baseCurrency)}`,
+                        color: COLOR_POSITIVE,
+                      },
+                    },
+                    {
+                      tag: {
+                        value: `Liabilities: ${formatCurrency(portfolioTotals.liabilities, valuation.baseCurrency)}`,
+                        color: portfolioTotals.liabilities < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL,
+                      },
+                    },
+                    {
+                      tag: {
+                        value: `Net: ${formatCurrency(portfolioTotals.net, valuation.baseCurrency)}`,
+                        color: portfolioTotals.net >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE,
+                      },
+                    },
+                  ]
+            }
+            detail={
+              <List.Item.Detail
+                metadata={
+                  <List.Item.Detail.Metadata>
+                    <List.Item.Detail.Metadata.Label
+                      title="Assets"
+                      text={formatCurrency(portfolioTotals.assets, valuation.baseCurrency)}
+                    />
+                    <List.Item.Detail.Metadata.TagList title="Liabilities">
+                      <List.Item.Detail.Metadata.TagList.Item
+                        text={formatCurrency(portfolioTotals.liabilities, valuation.baseCurrency)}
+                        color={portfolioTotals.liabilities < 0 ? COLOR_NEGATIVE : COLOR_NEUTRAL}
+                      />
+                    </List.Item.Detail.Metadata.TagList>
+                    <List.Item.Detail.Metadata.Separator />
+                    <List.Item.Detail.Metadata.TagList title="Net Worth">
+                      <List.Item.Detail.Metadata.TagList.Item
+                        text={formatCurrency(portfolioTotals.net, valuation.baseCurrency)}
+                        color={portfolioTotals.net >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}
+                      />
+                    </List.Item.Detail.Metadata.TagList>
+                  </List.Item.Detail.Metadata>
+                }
+              />
+            }
+            actions={
+              <ActionPanel>
+                <PortfolioActions
+                  onAddAccount={onAddAccount}
+                  onRefresh={onRefresh}
+                  onSearchInvestments={hasAccounts ? onSearchInvestments : undefined}
+                  toggleDetailAction={toggleDetailAction}
+                />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
 
       {/* ── Accounts Without Valuation (fallback while loading) ── */}
       {!valuation &&
@@ -754,4 +833,58 @@ function sortPositions(
   });
 
   return sorted;
+}
+
+// ──────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────
+
+/**
+ * Builds the navigation title string showing total portfolio value.
+ *
+ * Examples:
+ * - Loading: "Portfolio Tracker"
+ * - With data: "Portfolio Tracker — £142,350.00"
+ * - Empty: "Portfolio Tracker — £0.00"
+ */
+function buildNavigationTitle(valuation: PortfolioValuation | undefined, isLoading: boolean): string {
+  const base = "Portfolio Tracker";
+
+  if (isLoading && !valuation) {
+    return base;
+  }
+
+  if (!valuation || valuation.accounts.length === 0) {
+    return base;
+  }
+
+  const totalFormatted = formatCurrency(valuation.totalValue, valuation.baseCurrency);
+
+  return `${base} — ${totalFormatted}`;
+}
+
+/**
+ * Computes asset / liability / net totals from the portfolio valuation.
+ *
+ * Assets = sum of all non-debt account values (always ≥ 0)
+ * Liabilities = sum of all debt account values (negative or 0)
+ * Net = assets + liabilities (= valuation.totalValue)
+ */
+function buildPortfolioTotals(
+  valuation: PortfolioValuation | undefined,
+): { assets: number; liabilities: number; net: number } | undefined {
+  if (!valuation || valuation.accounts.length === 0) return undefined;
+
+  let assets = 0;
+  let liabilities = 0;
+
+  for (const av of valuation.accounts) {
+    if (isDebtAccountType(av.account.type)) {
+      liabilities += av.totalBaseValue;
+    } else {
+      assets += av.totalBaseValue;
+    }
+  }
+
+  return { assets, liabilities, net: assets + liabilities };
 }
