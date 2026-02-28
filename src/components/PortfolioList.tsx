@@ -192,8 +192,6 @@ export function PortfolioList({
 
   // ── Navigation Title ──
 
-  const navTitle = buildNavigationTitle(valuation, isLoading);
-
   // ── Offline / Error Indicator ──
 
   const isOffline = errors.length > 0 && errors.every((e) => e.type === ErrorType.OFFLINE);
@@ -239,7 +237,6 @@ export function PortfolioList({
     <List
       isLoading={isLoading}
       isShowingDetail={isShowingDetail && hasPositions}
-      navigationTitle={navTitle}
       searchBarPlaceholder={searchPlaceholder}
       searchBarAccessory={searchBarAccessory}
     >
@@ -252,7 +249,7 @@ export function PortfolioList({
           <List.Item
             icon={{ source: Icon.Info, tintColor: COLOR_PRIMARY }}
             title="You're viewing sample data"
-            subtitle="This demo portfolio shows how the extension works."
+            subtitle="Press Enter to remove sample data · Add your own accounts below"
             keywords={["sample", "demo", "preview"]}
             actions={
               <ActionPanel>
@@ -757,32 +754,4 @@ function sortPositions(
   });
 
   return sorted;
-}
-
-// ──────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────
-
-/**
- * Builds the navigation title string showing total portfolio value.
- *
- * Examples:
- * - Loading: "Portfolio Tracker"
- * - With data: "Portfolio Tracker — £142,350.00"
- * - Empty: "Portfolio Tracker — £0.00"
- */
-function buildNavigationTitle(valuation: PortfolioValuation | undefined, isLoading: boolean): string {
-  const base = "Portfolio Tracker";
-
-  if (isLoading && !valuation) {
-    return base;
-  }
-
-  if (!valuation || valuation.accounts.length === 0) {
-    return base;
-  }
-
-  const totalFormatted = formatCurrency(valuation.totalValue, valuation.baseCurrency);
-
-  return `${base} — ${totalFormatted}`;
 }

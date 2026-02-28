@@ -8,11 +8,21 @@
  * All sample account and position IDs are prefixed with SAMPLE_ID_PREFIX
  * so they can be identified and removed without a deletion confirmation.
  *
- * The sample data mirrors the test fixtures but uses the sample prefix
- * convention for easy cleanup.
+ * The sample data is designed to showcase every asset class and position type
+ * the extension supports:
+ *
+ * Accounts:
+ *   - ISA          → ETF + Equity (UK-listed)
+ *   - Brokerage    → Equity + Cash (US-listed, cross-currency)
+ *   - Savings      → Cash holding
+ *   - Property     → Mortgage (with full params) + Owned Outright
+ *   - Debt         → Credit Card + Loan (with loan term dates)
+ *
+ * This ensures screenshots taken from the sample portfolio cover the full
+ * breadth of the extension's features.
  */
 
-import { Account, AccountType, AssetType, Position } from "./types";
+import { Account, AccountType, AssetType, DebtData, MortgageData, Position } from "./types";
 import { SAMPLE_ID_PREFIX } from "./constants";
 
 // ──────────────────────────────────────────
@@ -30,7 +40,7 @@ export function hasSampleAccounts(accounts: Account[]): boolean {
 }
 
 // ──────────────────────────────────────────
-// Sample Positions
+// Sample Positions — ISA (UK-listed ETF + Equity)
 // ──────────────────────────────────────────
 
 const SAMPLE_POSITIONS_ISA: Position[] = [
@@ -39,15 +49,6 @@ const SAMPLE_POSITIONS_ISA: Position[] = [
     symbol: "VUSA.L",
     name: "Vanguard S&P 500 UCITS ETF",
     units: 50,
-    currency: "GBP",
-    assetType: AssetType.ETF,
-    addedAt: "2024-03-15T10:00:00.000Z",
-  },
-  {
-    id: `${SAMPLE_ID_PREFIX}pos-vwrl`,
-    symbol: "VWRL.L",
-    name: "Vanguard FTSE All-World UCITS ETF",
-    units: 100,
     currency: "GBP",
     assetType: AssetType.ETF,
     addedAt: "2024-01-10T09:30:00.000Z",
@@ -61,53 +62,136 @@ const SAMPLE_POSITIONS_ISA: Position[] = [
     assetType: AssetType.EQUITY,
     addedAt: "2024-06-01T14:00:00.000Z",
   },
-  {
-    id: `${SAMPLE_ID_PREFIX}pos-shel`,
-    symbol: "SHEL.L",
-    name: "Shell PLC",
-    units: 40,
-    currency: "GBP",
-    assetType: AssetType.EQUITY,
-    addedAt: "2024-05-20T11:00:00.000Z",
-  },
 ];
+
+// ──────────────────────────────────────────
+// Sample Positions — Brokerage (US Equity + Cash)
+// ──────────────────────────────────────────
 
 const SAMPLE_POSITIONS_BROKERAGE: Position[] = [
   {
     id: `${SAMPLE_ID_PREFIX}pos-aapl`,
     symbol: "AAPL",
     name: "Apple Inc.",
-    units: 30,
+    units: 10,
     currency: "USD",
     assetType: AssetType.EQUITY,
     addedAt: "2024-02-14T15:00:00.000Z",
   },
   {
-    id: `${SAMPLE_ID_PREFIX}pos-msft`,
-    symbol: "MSFT",
-    name: "Microsoft Corporation",
-    units: 15,
+    id: `${SAMPLE_ID_PREFIX}pos-cash-usd`,
+    symbol: "CASH:USD",
+    name: "US Dollar Cash",
+    units: 2500,
     currency: "USD",
-    assetType: AssetType.EQUITY,
-    addedAt: "2024-04-01T12:00:00.000Z",
-  },
-  {
-    id: `${SAMPLE_ID_PREFIX}pos-googl`,
-    symbol: "GOOGL",
-    name: "Alphabet Inc.",
-    units: 10.5,
-    currency: "USD",
-    assetType: AssetType.EQUITY,
-    addedAt: "2024-07-01T16:30:00.000Z",
-  },
-  {
-    id: `${SAMPLE_ID_PREFIX}pos-voo`,
-    symbol: "VOO",
-    name: "Vanguard S&P 500 ETF",
-    units: 5,
-    currency: "USD",
-    assetType: AssetType.ETF,
+    assetType: AssetType.CASH,
+    priceOverride: 1,
     addedAt: "2024-03-01T10:00:00.000Z",
+  },
+];
+
+// ──────────────────────────────────────────
+// Sample Positions — Savings Account (GBP Cash)
+// ──────────────────────────────────────────
+
+const SAMPLE_POSITIONS_SAVINGS: Position[] = [
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-cash-gbp`,
+    symbol: "CASH:GBP",
+    name: "Emergency Fund",
+    units: 5000,
+    currency: "GBP",
+    assetType: AssetType.CASH,
+    priceOverride: 1,
+    addedAt: "2024-01-05T08:00:00.000Z",
+  },
+];
+
+// ──────────────────────────────────────────
+// Sample Positions — Property (Mortgage + Owned Outright)
+// ──────────────────────────────────────────
+
+const SAMPLE_MORTGAGE_DATA: MortgageData = {
+  totalPropertyValue: 350000,
+  equity: 85000,
+  valuationDate: "2023-06-15",
+  postcode: "SW1A 1AA",
+  mortgageRate: 4.5,
+  mortgageTerm: 25,
+  mortgageStartDate: "2021-03-01",
+};
+
+const SAMPLE_POSITIONS_PROPERTY: Position[] = [
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-mortgage`,
+    symbol: "PROPERTY:SW1A1AA",
+    name: "London Flat",
+    units: 1,
+    currency: "GBP",
+    assetType: AssetType.MORTGAGE,
+    mortgageData: SAMPLE_MORTGAGE_DATA,
+    addedAt: "2023-06-15T12:00:00.000Z",
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-owned`,
+    symbol: "PROPERTY:EH11BB",
+    name: "Lake District Cottage",
+    units: 1,
+    currency: "GBP",
+    assetType: AssetType.OWNED_PROPERTY,
+    mortgageData: {
+      totalPropertyValue: 180000,
+      equity: 180000,
+      valuationDate: "2024-01-20",
+      postcode: "LA23 1AU",
+    },
+    addedAt: "2024-01-20T10:00:00.000Z",
+  },
+];
+
+// ──────────────────────────────────────────
+// Sample Positions — Debt (Credit Card + Loan)
+// ──────────────────────────────────────────
+
+const SAMPLE_CREDIT_CARD_DATA: DebtData = {
+  currentBalance: 1850,
+  apr: 19.9,
+  repaymentDayOfMonth: 15,
+  monthlyRepayment: 200,
+  enteredAt: "2024-06-01T00:00:00.000Z",
+};
+
+const SAMPLE_LOAN_DATA: DebtData = {
+  currentBalance: 8500,
+  apr: 5.9,
+  repaymentDayOfMonth: 1,
+  monthlyRepayment: 275,
+  enteredAt: "2024-01-15T00:00:00.000Z",
+  loanStartDate: "2023-01-15",
+  loanEndDate: "2026-01-15",
+  totalTermMonths: 36,
+};
+
+const SAMPLE_POSITIONS_DEBT: Position[] = [
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-cc`,
+    symbol: "DEBT:AMEX_GOLD",
+    name: "Amex Gold Card",
+    units: 1,
+    currency: "GBP",
+    assetType: AssetType.CREDIT_CARD,
+    debtData: SAMPLE_CREDIT_CARD_DATA,
+    addedAt: "2024-06-01T00:00:00.000Z",
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}pos-loan`,
+    symbol: "DEBT:CAR_LOAN",
+    name: "Car Loan",
+    units: 1,
+    currency: "GBP",
+    assetType: AssetType.LOAN,
+    debtData: SAMPLE_LOAN_DATA,
+    addedAt: "2024-01-15T00:00:00.000Z",
   },
 ];
 
@@ -118,13 +202,20 @@ const SAMPLE_POSITIONS_BROKERAGE: Position[] = [
 /**
  * Pre-built sample accounts ready to be merged into a portfolio.
  *
- * Contains:
- * - A UK ISA with 4 LSE-listed positions (2 ETFs + 2 equities)
- * - A US Brokerage with 4 US-listed positions (3 equities + 1 ETF)
+ * Contains five accounts covering every supported account and position type:
  *
- * This gives the user a realistic two-account, cross-currency preview
- * that exercises all display features (FX conversion, GBp normalisation,
- * fractional shares, multiple asset types).
+ * | Account            | Type            | Positions                          |
+ * |--------------------|-----------------|------------------------------------|
+ * | Sample ISA         | ISA             | ETF (VUSA.L) + Equity (AZN.L)     |
+ * | Sample Brokerage   | BROKERAGE       | Equity (AAPL) + Cash (USD)         |
+ * | Sample Savings     | SAVINGS_ACCOUNT | Cash (GBP)                         |
+ * | Sample Property    | PROPERTY        | Mortgage + Owned Outright          |
+ * | Sample Debts       | DEBT            | Credit Card + Loan                 |
+ *
+ * This gives the user a realistic multi-account, cross-currency preview
+ * that exercises all display features: FX conversion, GBp normalisation,
+ * cash holdings, property HPI appreciation, mortgage calculations,
+ * debt tracking with amortisation, and multiple asset types.
  */
 export const SAMPLE_ACCOUNTS: Account[] = [
   {
@@ -140,5 +231,26 @@ export const SAMPLE_ACCOUNTS: Account[] = [
     type: AccountType.BROKERAGE,
     createdAt: new Date().toISOString(),
     positions: SAMPLE_POSITIONS_BROKERAGE,
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}acc-savings`,
+    name: "Sample Savings",
+    type: AccountType.SAVINGS_ACCOUNT,
+    createdAt: new Date().toISOString(),
+    positions: SAMPLE_POSITIONS_SAVINGS,
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}acc-property`,
+    name: "Sample Property",
+    type: AccountType.PROPERTY,
+    createdAt: new Date().toISOString(),
+    positions: SAMPLE_POSITIONS_PROPERTY,
+  },
+  {
+    id: `${SAMPLE_ID_PREFIX}acc-debt`,
+    name: "Sample Debts",
+    type: AccountType.DEBT,
+    createdAt: new Date().toISOString(),
+    positions: SAMPLE_POSITIONS_DEBT,
   },
 ];

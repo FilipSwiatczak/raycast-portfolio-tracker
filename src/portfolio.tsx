@@ -15,8 +15,8 @@
  */
 
 import React from "react";
-import { useState, useEffect } from "react";
-import { useNavigation, updateCommandMetadata, showToast, Toast } from "@raycast/api";
+import { useState, useEffect, useRef } from "react";
+import { useNavigation, updateCommandMetadata, showToast, Toast, LocalStorage } from "@raycast/api";
 import { usePortfolio } from "./hooks/usePortfolio";
 import { usePortfolioValue } from "./hooks/usePortfolioValue";
 import { PortfolioList } from "./components/PortfolioList";
@@ -36,6 +36,7 @@ import { Account, Position, AccountType, isPropertyAssetType, isDebtAssetType } 
 import { formatCurrency, formatCurrencyCompact } from "./utils/formatting";
 import { clearPriceCache } from "./services/price-cache";
 import { SAMPLE_ACCOUNTS, isSampleAccount } from "./utils/sample-portfolio";
+import { STORAGE_KEYS } from "./utils/constants";
 
 // ──────────────────────────────────────────
 // Command Component
@@ -80,6 +81,40 @@ export default function PortfolioCommand(): React.JSX.Element {
   // ── Archived Debt Toggle State ──
   const [showArchivedDebt, setShowArchivedDebt] = useState(false);
 
+  // ── Auto-load sample portfolio on first launch ──
+  // When the portfolio finishes loading for the first time and contains no
+  // accounts AND the user hasn't previously dismissed the sample, automatically
+  // merge the sample data so new users see a realistic demo immediately.
+  // The ref ensures this only fires once per session.
+  const didAutoLoadSample = useRef(false);
+
+  useEffect(() => {
+    if (didAutoLoadSample.current) return;
+    if (isPortfolioLoading) return; // wait for initial load to finish
+    if (!portfolio) return;
+    if (portfolio.accounts.length > 0) return; // user already has data
+
+    didAutoLoadSample.current = true;
+
+    (async () => {
+      try {
+        // Check whether the user previously dismissed the sample portfolio.
+        // If so, don't auto-load it again — respect their choice.
+        const dismissed = await LocalStorage.getItem<string>(STORAGE_KEYS.SAMPLE_DISMISSED);
+        if (dismissed === "true") return;
+
+        await mergeAccounts(SAMPLE_ACCOUNTS);
+        await showToast({
+          style: Toast.Style.Success,
+          title: "Sample Portfolio Loaded",
+          message: "Select the banner and press Enter to hide it when you're ready.",
+        });
+      } catch (error) {
+        console.error("Failed to auto-load sample portfolio:", error);
+      }
+    })();
+  }, [isPortfolioLoading, portfolio, mergeAccounts]);
+
   // ── Auto-persist paid-off flag when sync detects a fully-repaid debt ──
   // When the repayment sync calculates that a debt's balance has reached zero,
   // it signals this via `newlyPaidOffIds`. We write `paidOff: true` back to
@@ -121,6 +156,10 @@ export default function PortfolioCommand(): React.JSX.Element {
       updateCommandMetadata({ subtitle });
     } else if (valuation && valuation.accounts.length > 0) {
       updateCommandMetadata({ subtitle: formatCurrency(0, baseCurrency) });
+    } else if (valuation && valuation.accounts.length === 0) {
+      // Portfolio is empty (e.g. after removing sample data) — clear the subtitle
+      // so Raycast's search bar doesn't show a stale total.
+      updateCommandMetadata({ subtitle: "" });
     }
   }, [valuation, baseCurrency]);
 
@@ -413,6 +452,22 @@ export default function PortfolioCommand(): React.JSX.Element {
 
       for (const accountId of sampleAccountIds) {
         await removeAccount(accountId);
+      }
+
+      // Persist the dismissal flag so the sample is never auto-loaded again.
+      await LocalStorage.setItem(STORAGE_KEYS.SAMPLE_DISMISSED, "true");
+
+      // Force revalidation so the hook picks up the updated storage state.
+      // Without this, the portfolio closure may still reference stale data
+      // and the valuation (+ command metadata subtitle) won't update.
+      revalidatePortfolio();
+      refreshPrices();
+
+      // If removing samples leaves the portfolio empty, clear the subtitle
+      // immediately rather than waiting for the valuation effect to fire.
+      const remainingAccounts = accounts.filter((a) => !isSampleAccount(a.id));
+      if (remainingAccounts.length === 0 || remainingAccounts.every((a) => a.positions.length === 0)) {
+        updateCommandMetadata({ subtitle: "" });
       }
 
       await showToast({

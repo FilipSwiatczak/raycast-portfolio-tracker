@@ -32,7 +32,6 @@ import {
   confirmAlert,
   Alert,
   Form,
-  Color,
   open,
 } from "@raycast/api";
 import { Portfolio, PortfolioValuation, Account } from "../utils/types";

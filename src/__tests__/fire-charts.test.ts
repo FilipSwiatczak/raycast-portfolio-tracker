@@ -1208,9 +1208,9 @@ describe("buildDashboardMarkdown", () => {
     const b64Match = md.match(/base64,([A-Za-z0-9+/=]+)\)/);
     expect(b64Match).not.toBeNull();
     const svg = Buffer.from(b64Match![1], "base64").toString("utf-8");
-    // Light theme uses different colours (hex + fill-opacity, no rgba)
-    expect(svg).toContain("#007AFF");
-    expect(svg).toContain('fill="#000000" fill-opacity="0.55"');
+    // Light theme uses custom palette colours (hex + fill-opacity, no rgba)
+    expect(svg).toContain("#59C9A5"); // contributions (teal)
+    expect(svg).toContain('fill="#23395B" fill-opacity="0.55"'); // base growth (navy)
   });
 
   // ── Result shape tests ──

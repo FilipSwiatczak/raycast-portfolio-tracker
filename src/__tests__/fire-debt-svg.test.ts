@@ -356,16 +356,16 @@ describe("buildDebtProjectionSVG", () => {
     const lightConfig: DebtChartConfig = { ...defaultDebtConfig, theme: "light" };
     const svg = buildDebtProjectionSVG(bars, lightConfig);
 
-    // Light background should be white
-    expect(svg).toContain('fill="#FFFFFF"');
+    // Light background uses custom palette butter (#FFFD98)
+    expect(svg).toContain('fill="#FFFD98"');
   });
 
   it("applies dark theme palette for inline fallback attributes when theme is dark", () => {
     const bars = makeSampleDebtBars();
     const svg = buildDebtProjectionSVG(bars, defaultDebtConfig);
 
-    // Dark background
-    expect(svg).toContain('fill="#1C1C1E"');
+    // Dark background uses custom palette navy (#23395B)
+    expect(svg).toContain('fill="#23395B"');
   });
 
   it("renders inline principal labels when wide enough", () => {
@@ -848,7 +848,8 @@ describe("buildDashboardMarkdown with debt data", () => {
     const result = buildDashboardMarkdown(projection, defaultSettings, "GBP", [], "light", undefined, sampleDebtData);
 
     expect(result.debtSvg).toBeTruthy();
-    expect(result.debtSvg).toContain('fill="#FFFFFF"');
+    // Light background uses custom palette butter (#FFFD98)
+    expect(result.debtSvg).toContain('fill="#FFFD98"');
   });
 
   it("embeds the debt summary as an SVG <title> tooltip", () => {

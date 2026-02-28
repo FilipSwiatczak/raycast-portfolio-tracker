@@ -8,6 +8,18 @@
 import { Color } from "@raycast/api";
 import { AccountType, AssetType, SortField, SortDirection, SortOption } from "./types";
 
+/**
+ * Casts a hex string to `Color` for use in Raycast API props.
+ *
+ * Raycast accepts hex strings at runtime (they are `Color.Raw`), but some
+ * component props (e.g. `List.Item.Accessory.text.color`) are typed as
+ * `Color` (the enum) rather than `Color.ColorLike`. This helper bridges
+ * the gap so we can use our custom palette hex values without type errors.
+ */
+function asColor(hex: string): Color {
+  return hex as unknown as Color;
+}
+
 // ──────────────────────────────────────────
 // App Color Palette (custom hexes)
 // ──────────────────────────────────────────
@@ -21,10 +33,10 @@ export const APP_COLOR_PALETTE = {
 } as const;
 
 /** Semantic colors for consistent UI accents */
-export const COLOR_PRIMARY: Color.ColorLike = APP_COLOR_PALETTE.navy;
-export const COLOR_MUTED: Color.ColorLike = APP_COLOR_PALETTE.mint;
-export const COLOR_WARNING: Color.ColorLike = APP_COLOR_PALETTE.butter;
-export const COLOR_DESTRUCTIVE: Color.ColorLike = APP_COLOR_PALETTE.rose;
+export const COLOR_PRIMARY = asColor(APP_COLOR_PALETTE.navy);
+export const COLOR_MUTED = asColor(APP_COLOR_PALETTE.mint);
+export const COLOR_WARNING = asColor(APP_COLOR_PALETTE.butter);
+export const COLOR_DESTRUCTIVE = asColor(APP_COLOR_PALETTE.rose);
 
 // ──────────────────────────────────────────
 // Account Type Display Labels
@@ -50,19 +62,19 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export const ACCOUNT_TYPE_OPTIONS = Object.entries(ACCOUNT_TYPE_LABELS).map(([value, title]) => ({ value, title }));
 
 /** Colour-coded tags for each account type (used in section subtitles) */
-export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color.ColorLike> = {
-  [AccountType.ISA]: APP_COLOR_PALETTE.teal,
-  [AccountType.LISA]: APP_COLOR_PALETTE.mint,
-  [AccountType.SIPP]: APP_COLOR_PALETTE.navy,
-  [AccountType.GIA]: APP_COLOR_PALETTE.teal,
-  [AccountType.BROKERAGE]: APP_COLOR_PALETTE.rose,
-  [AccountType._401K]: APP_COLOR_PALETTE.butter,
-  [AccountType.CRYPTO]: APP_COLOR_PALETTE.rose,
-  [AccountType.CURRENT_ACCOUNT]: APP_COLOR_PALETTE.mint,
-  [AccountType.SAVINGS_ACCOUNT]: APP_COLOR_PALETTE.teal,
-  [AccountType.PROPERTY]: APP_COLOR_PALETTE.navy,
-  [AccountType.DEBT]: APP_COLOR_PALETTE.rose,
-  [AccountType.OTHER]: APP_COLOR_PALETTE.navy,
+export const ACCOUNT_TYPE_COLORS: Record<AccountType, Color> = {
+  [AccountType.ISA]: asColor(APP_COLOR_PALETTE.teal),
+  [AccountType.LISA]: asColor(APP_COLOR_PALETTE.mint),
+  [AccountType.SIPP]: asColor(APP_COLOR_PALETTE.navy),
+  [AccountType.GIA]: asColor(APP_COLOR_PALETTE.teal),
+  [AccountType.BROKERAGE]: asColor(APP_COLOR_PALETTE.rose),
+  [AccountType._401K]: asColor(APP_COLOR_PALETTE.butter),
+  [AccountType.CRYPTO]: asColor(APP_COLOR_PALETTE.rose),
+  [AccountType.CURRENT_ACCOUNT]: asColor(APP_COLOR_PALETTE.mint),
+  [AccountType.SAVINGS_ACCOUNT]: asColor(APP_COLOR_PALETTE.teal),
+  [AccountType.PROPERTY]: asColor(APP_COLOR_PALETTE.navy),
+  [AccountType.DEBT]: asColor(APP_COLOR_PALETTE.rose),
+  [AccountType.OTHER]: asColor(APP_COLOR_PALETTE.navy),
 };
 
 // ──────────────────────────────────────────
@@ -182,6 +194,9 @@ export const STORAGE_KEYS = {
   PORTFOLIO: "portfolio-data",
   /** Debt repayment log — tracks auto-applied monthly repayments */
   DEBT_REPAYMENTS: "debt-repayments",
+  /** Flag set to "true" when the user dismisses the sample portfolio.
+   *  Prevents auto-loading the sample again on subsequent launches. */
+  SAMPLE_DISMISSED: "sample-dismissed",
 } as const;
 
 // ──────────────────────────────────────────
@@ -211,13 +226,13 @@ export const UNITS_DECIMALS = 4;
 export const PERCENT_DECIMALS = 2;
 
 /** Colour used for positive changes / gains */
-export const COLOR_POSITIVE: Color.ColorLike = APP_COLOR_PALETTE.teal;
+export const COLOR_POSITIVE = asColor(APP_COLOR_PALETTE.teal);
 
 /** Colour used for negative changes / losses */
-export const COLOR_NEGATIVE: Color.ColorLike = APP_COLOR_PALETTE.rose;
+export const COLOR_NEGATIVE = asColor(APP_COLOR_PALETTE.rose);
 
 /** Colour used for neutral / zero changes */
-export const COLOR_NEUTRAL: Color.ColorLike = APP_COLOR_PALETTE.navy;
+export const COLOR_NEUTRAL = asColor(APP_COLOR_PALETTE.navy);
 
 // ──────────────────────────────────────────
 // Sorting Configuration

@@ -240,7 +240,7 @@ interface ListModeProps {
   currentPrice: number;
   totalBaseValue: number;
   changePercent: number;
-  changeColor: Color.ColorLike;
+  changeColor: Color;
   baseCurrency: string;
   displayName: string;
   isRenamed: boolean;
@@ -429,7 +429,7 @@ interface DetailModeProps {
   totalBaseValue: number;
   change: number;
   changePercent: number;
-  changeColor: Color.ColorLike;
+  changeColor: Color;
   fxRate: number;
   isCrossCurrency: boolean;
   baseCurrency: string;

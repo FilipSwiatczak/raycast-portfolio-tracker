@@ -34,7 +34,7 @@
  */
 
 import React from "react";
-import { Form, ActionPanel, Action, Detail, Icon, useNavigation, Color } from "@raycast/api";
+import { Form, ActionPanel, Action, Detail, Icon, useNavigation } from "@raycast/api";
 import { useState, useMemo } from "react";
 import { AssetSearchResult, AssetType } from "../utils/types";
 import { useAssetPrice } from "../hooks/useAssetPrice";
