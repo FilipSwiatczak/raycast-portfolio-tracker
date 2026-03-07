@@ -10,7 +10,12 @@
  * - "What if inflation rises to 4%?"
  * - "What if my growth rate drops to 5%?"
  * - "What if I change my FIRE target to £800,000?"
- * - "What happens if I start with £300,000 and contribute £2,000/month?"
+ * - "What happens if I start with £300,000 and contribute £2,000/month at 6% growth?"
+ * - "What if I coast to FIRE from age 45?"
+ * - "What if I retire at 55 — what contributions do I need?"
+ *
+ * The output includes the mathematical formulas used so the AI can verify
+ * and extend calculations without re-fetching data.
  */
 
 import { loadFireSettingsForTool, loadPortfolioForTool, computePortfolioValue } from "./tool-data";
@@ -76,19 +81,42 @@ type Input = {
    * Example: 3.5 means 3.5% withdrawal rate
    */
   withdrawalRate?: number;
+
+  /**
+   * Simulate a Coast FIRE scenario: the user stops ALL contributions at this
+   * age and lets the portfolio grow passively to the FIRE number.
+   * If provided, the scenario will compute when (year + age) the user can
+   * retire under coast conditions, instead of the standard projection.
+   * Example: 45 means "what if I stop contributing at age 45?"
+   */
+  coastFromAge?: number;
+
+  /**
+   * Target retirement age for a Coast FIRE "when can I start coasting?" query.
+   * When provided alongside normal scenario parameters, the output will
+   * calculate the required Coast FIRE balance and the year at which the
+   * user's projected portfolio (with contributions) reaches that balance.
+   * Example: 55 means "when can I start coasting to retire at 55?"
+   */
+  targetRetirementAge?: number;
 };
 
 /**
  * Simulates a FIRE projection with custom parameters for what-if analysis.
  *
  * Use this tool when the user asks hypothetical questions about their FIRE
- * journey, such as "What if I increase contributions by £200/month?",
- * "What if growth drops to 5%?", "What if I target £800k instead?",
- * or "How long if I start with £300k and save £2k/month at 6% growth?".
+ * journey, such as:
+ * - "What if I increase contributions by £200/month?"
+ * - "What if growth drops to 5%?"
+ * - "What if I target £800k instead?"
+ * - "How long if I start with £300k and save £2k/month at 6% growth?"
+ * - "What if I stop contributing at age 45 and coast?" → use coastFromAge: 45
+ * - "When can I start coasting to retire at 55?" → use targetRetirementAge: 55
  *
  * The tool loads the user's current FIRE settings as a baseline, applies
  * any overrides from the input, and runs a new projection. Both the
- * baseline and scenario results are returned for comparison.
+ * baseline and scenario results are returned for comparison, along with
+ * the mathematical formulas used so the AI can extend or verify results.
  *
  * To get the user's current FIRE settings and projection first, use
  * the get-fire-projection tool.
@@ -162,6 +190,120 @@ export default async function tool(input: Input) {
     holidayEntitlement: settings.holidayEntitlement,
   });
 
+  // ── Coast FIRE scenario calculations ──
+
+  const currentYear = new Date().getFullYear();
+  const scenarioRealRate = (scenarioGrowthRate - scenarioInflation) / 100;
+
+  const coastAnalysis: string[] = [];
+
+  if (input.coastFromAge !== undefined) {
+    // Q: "What if I stop contributing at age X?"
+    const coastStartYear = settings.yearOfBirth + input.coastFromAge;
+    const yearsToCoastStart = coastStartYear - currentYear;
+
+    if (yearsToCoastStart <= 0) {
+      coastAnalysis.push(
+        `  Note: coastFromAge ${input.coastFromAge} is in the past — showing result if coasting started today.`,
+      );
+    }
+
+    // Project portfolio with contributions up to coast start year
+    let balanceAtCoast = scenarioPortfolioValue;
+    const yearsContributing = Math.max(0, yearsToCoastStart);
+    for (let t = 0; t < yearsContributing; t++) {
+      balanceAtCoast = balanceAtCoast * (1 + scenarioRealRate) + scenarioAnnualContrib * (1 + scenarioRealRate / 2);
+    }
+
+    // From coast start, grow with zero contributions
+    const nCoastToFire =
+      scenarioRealRate > 0 && balanceAtCoast > 0
+        ? Math.log(scenarioTargetValue / balanceAtCoast) / Math.log(1 + scenarioRealRate)
+        : Infinity;
+
+    const coastFireYear = Math.round(coastStartYear + nCoastToFire);
+    const coastFireAge = coastFireYear - settings.yearOfBirth;
+
+    coastAnalysis.push("");
+    coastAnalysis.push("COAST FIRE SCENARIO:");
+    coastAnalysis.push(`  Stop contributing at age: ${input.coastFromAge} (year ${coastStartYear})`);
+    coastAnalysis.push(`  Portfolio at coast start: ${formatCurrency(balanceAtCoast, "GBP")}`);
+    coastAnalysis.push(`  Formula: n = log(FN / V_coast) / log(1 + r)`);
+    coastAnalysis.push(
+      `           n = log(${formatCurrency(scenarioTargetValue, "GBP")} / ${formatCurrency(balanceAtCoast, "GBP")}) / log(1 + ${scenarioRealRate.toFixed(6)})`,
+    );
+    coastAnalysis.push(
+      `           n = ${isFinite(nCoastToFire) ? nCoastToFire.toFixed(2) : "∞"} years from coast start`,
+    );
+    if (isFinite(coastFireYear) && coastFireAge < 120) {
+      coastAnalysis.push(`  → Coast FIRE year: ${coastFireYear}`);
+      coastAnalysis.push(`  → Coast FIRE age:  ${coastFireAge}`);
+    } else {
+      coastAnalysis.push("  → Portfolio does not reach FIRE Number from coast balance — consider a later coast age.");
+    }
+  }
+
+  if (input.targetRetirementAge !== undefined) {
+    // Q: "When can I start coasting to retire at age X?"
+    const targetRetirementYear = settings.yearOfBirth + input.targetRetirementAge;
+    const yearsToTarget = targetRetirementYear - currentYear;
+
+    if (yearsToTarget <= 0) {
+      coastAnalysis.push(`  Note: targetRetirementAge ${input.targetRetirementAge} is in the past or current year.`);
+    } else {
+      const requiredCoastBalance = scenarioTargetValue / Math.pow(1 + scenarioRealRate, yearsToTarget);
+
+      coastAnalysis.push("");
+      coastAnalysis.push(
+        `COAST FIRE — WHEN CAN I START COASTING TO RETIRE AT AGE ${input.targetRetirementAge} (${targetRetirementYear})?`,
+      );
+      coastAnalysis.push(`  Formula: Required_Coast_Balance = FN / (1 + r)^n`);
+      coastAnalysis.push(
+        `           = ${formatCurrency(scenarioTargetValue, "GBP")} / (1 + ${scenarioRealRate.toFixed(6)})^${yearsToTarget}`,
+      );
+      coastAnalysis.push(`           = ${formatCurrency(requiredCoastBalance, "GBP")}`);
+      coastAnalysis.push("");
+
+      if (scenarioPortfolioValue >= requiredCoastBalance) {
+        coastAnalysis.push("  ✅ Already at Coast FIRE for this target!");
+        coastAnalysis.push(
+          `     Current portfolio (${formatCurrency(scenarioPortfolioValue, "GBP")}) ≥ required (${formatCurrency(requiredCoastBalance, "GBP")}).`,
+        );
+        coastAnalysis.push("     You can stop contributing now and still reach your target.");
+      } else {
+        // Find the year where accumulated balance (with contributions) hits the required coast balance
+        let balance = scenarioPortfolioValue;
+        let coastYear: number | null = null;
+        let coastAge: number | null = null;
+
+        for (let t = 1; t <= 30; t++) {
+          const yearsRemainingAtT = targetRetirementYear - (currentYear + t);
+          if (yearsRemainingAtT <= 0) break;
+          const requiredAtT = scenarioTargetValue / Math.pow(1 + scenarioRealRate, yearsRemainingAtT);
+          balance = balance * (1 + scenarioRealRate) + scenarioAnnualContrib * (1 + scenarioRealRate / 2);
+          if (balance >= requiredAtT) {
+            coastYear = currentYear + t;
+            coastAge = coastYear - settings.yearOfBirth;
+            break;
+          }
+        }
+
+        if (coastYear !== null && coastAge !== null) {
+          coastAnalysis.push(`  → Start coasting in: ${coastYear} (at age ${coastAge})`);
+          coastAnalysis.push(`  → That is ${coastYear - currentYear} year(s) from now.`);
+          coastAnalysis.push(`  → Portfolio needed by then: ${formatCurrency(requiredCoastBalance, "GBP")}`);
+          const coastGapPct = ((scenarioPortfolioValue / requiredCoastBalance) * 100).toFixed(1);
+          coastAnalysis.push(
+            `  Current progress to Coast FIRE: ${coastGapPct}% (gap: ${formatCurrency(requiredCoastBalance - scenarioPortfolioValue, "GBP")})`,
+          );
+        } else {
+          coastAnalysis.push("  → Could not determine coast start year within 30-year window.");
+          coastAnalysis.push(`     You may need higher contributions or a later retirement age target.`);
+        }
+      }
+    }
+  }
+
   // ── Format response ──
 
   const lines: string[] = [];
@@ -169,6 +311,32 @@ export default async function tool(input: Input) {
   lines.push("FIRE What-If Scenario Comparison");
   lines.push("================================");
   lines.push("");
+
+  // ── Mathematical formulas for this scenario ──
+
+  lines.push("FORMULAS USED:");
+  lines.push(
+    `  Real rate: r = (nominalGrowth - inflation) / 100 = (${scenarioGrowthRate} - ${scenarioInflation}) / 100 = ${scenarioRealRate.toFixed(6)}`,
+  );
+  lines.push("  Year-by-year: V(n) = V(n-1) × (1 + r) + C × (1 + r/2)");
+  lines.push(`    where C = annual contribution = ${formatCurrency(scenarioAnnualContrib, "GBP")}/year`);
+  lines.push("  Coast FIRE balance: Coast_Balance = FN / (1 + r)^yearsToRetirement");
+  lines.push("  Lump sum to reach FIRE year T (without changing contributions):");
+  lines.push("    N = T - currentYear");
+  lines.push("    compoundFactor = (1 + r)^N");
+  lines.push("    contribFV = C × (1 + r/2) × (compoundFactor - 1) / r");
+  lines.push("    P_required = (FN - contribFV) / compoundFactor");
+  lines.push("    Lump_Sum = P_required - P_current");
+  lines.push("");
+
+  // ── Coast FIRE analysis (injected before comparison) ──
+
+  if (coastAnalysis.length > 0) {
+    for (const line of coastAnalysis) {
+      lines.push(line);
+    }
+    lines.push("");
+  }
 
   // ── Describe what changed ──
 
@@ -205,6 +373,12 @@ export default async function tool(input: Input) {
   }
   if (input.yearOfBirth !== undefined) {
     changes.push(`Year of Birth: ${baselineYearOfBirth} → ${scenarioYearOfBirth}`);
+  }
+  if (input.coastFromAge !== undefined) {
+    changes.push(`Coast Mode: stop contributing at age ${input.coastFromAge}`);
+  }
+  if (input.targetRetirementAge !== undefined) {
+    changes.push(`Target Retirement Age: ${input.targetRetirementAge} (Coast FIRE analysis)`);
   }
 
   if (changes.length > 0) {
@@ -286,6 +460,74 @@ export default async function tool(input: Input) {
       if (daysDiff !== 0) {
         const direction = daysDiff < 0 ? "fewer" : "more";
         lines.push(`  ${Math.abs(daysDiff).toLocaleString()} ${direction} calendar days to FIRE.`);
+      }
+    }
+
+    // ── Lump sum equivalent ──
+    // When the scenario changes the FIRE year, answer the natural follow-up:
+    // "how much would I need to invest today to get the same result without
+    // changing contributions?" — solved using Formula 10 (closed form).
+    //
+    // We show lump sums for BOTH directions:
+    //   - Scenario is EARLIER: how much to reach the scenario year from baseline contributions?
+    //   - Scenario is LATER:   how much to recover back to the baseline year?
+    //
+    // Using scenario rate and scenario contributions as the active parameters.
+
+    if (yearDiff !== 0 && scenarioRealRate > 0) {
+      const currentYear = new Date().getFullYear();
+
+      const computeLumpSum = (targetYear: number, currentPortfolio: number, annualContrib: number): number => {
+        const N = targetYear - currentYear;
+        if (N <= 0) return 0;
+        const compoundFactor = Math.pow(1 + scenarioRealRate, N);
+        const contribFV =
+          annualContrib > 0 && scenarioRealRate > 0
+            ? (annualContrib * (1 + scenarioRealRate / 2) * (compoundFactor - 1)) / scenarioRealRate
+            : annualContrib * N;
+        const pRequired = (scenarioTargetValue - contribFV) / compoundFactor;
+        return pRequired - currentPortfolio;
+      };
+
+      lines.push("");
+      lines.push("Lump Sum Equivalent (reach the same result without changing contributions):");
+
+      if (yearDiff < 0) {
+        // Scenario is earlier — how much lump sum from BASELINE contributions to hit scenario year?
+        const lumpToMatchScenario = computeLumpSum(
+          scenarioProjection.fireYear!,
+          baselinePortfolioValue,
+          baselineAnnualContrib,
+        );
+        if (lumpToMatchScenario > 0) {
+          lines.push(
+            `  To retire in ${scenarioProjection.fireYear} (age ${scenarioProjection.fireAge}) without changing contributions:`,
+          );
+          lines.push(`    invest ${formatCurrency(lumpToMatchScenario, "GBP")} as a lump sum today.`);
+          lines.push(
+            `  Formula: P_required = (FN - C×(1+r/2)×((1+r)^N-1)/r) / (1+r)^N  where N=${scenarioProjection.fireYear! - currentYear}`,
+          );
+        } else {
+          lines.push(`  No lump sum needed — already on track to retire by ${scenarioProjection.fireYear}.`);
+        }
+      } else {
+        // Scenario is later — how much lump sum from SCENARIO contributions to recover baseline year?
+        const lumpToRecoverBaseline = computeLumpSum(
+          baselineProjection.fireYear!,
+          scenarioPortfolioValue,
+          scenarioAnnualContrib,
+        );
+        if (lumpToRecoverBaseline > 0) {
+          lines.push(
+            `  To still retire in ${baselineProjection.fireYear} (age ${baselineProjection.fireAge}) despite this scenario:`,
+          );
+          lines.push(`    invest ${formatCurrency(lumpToRecoverBaseline, "GBP")} as a lump sum today.`);
+          lines.push(
+            `  Formula: P_required = (FN - C×(1+r/2)×((1+r)^N-1)/r) / (1+r)^N  where N=${baselineProjection.fireYear! - currentYear}`,
+          );
+        } else {
+          lines.push(`  No lump sum needed — still on track for ${baselineProjection.fireYear} under this scenario.`);
+        }
       }
     }
   } else if (!baselineProjection.targetHitInWindow && scenarioProjection.targetHitInWindow) {
