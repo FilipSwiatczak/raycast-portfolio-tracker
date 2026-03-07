@@ -11,12 +11,13 @@
 
 import React from "react";
 import { useMemo, useState } from "react";
-import { Action, ActionPanel, Form, Icon, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Form, Icon, useNavigation, getPreferenceValues } from "@raycast/api";
 import { Account, AccountType, AssetSearchResult, AssetType } from "../utils/types";
 import { SearchInvestmentsView } from "./SearchInvestmentsView";
 import { SelectAccountForInvestment } from "./SelectAccountForInvestment";
 import { AccountForm } from "./AccountForm";
 import { useAssetPrice } from "../hooks/useAssetPrice";
+import { useFxRate } from "../hooks/useFxRate";
 import { usePortfolio } from "../hooks/usePortfolio";
 import {
   validateAssetName,
@@ -174,8 +175,10 @@ type InputMode = "units" | "value";
 
 function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmInvestmentFormProps): React.JSX.Element {
   const { price, isLoading: isPriceLoading, error: priceError } = useAssetPrice(result.symbol);
+  const { baseCurrency } = getPreferenceValues<Preferences>();
 
   const [inputMode, setInputMode] = useState<InputMode>("units");
+  const [valueCurrency, setValueCurrency] = useState<string>(baseCurrency);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [unitsError, setUnitsError] = useState<string | undefined>(undefined);
   const [totalValueError, setTotalValueError] = useState<string | undefined>(undefined);
@@ -189,18 +192,47 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
     return price?.price ?? 0;
   }, [price]);
 
+  const assetCurrency = price?.currency ?? "";
+
+  const valueCurrencyOptions = useMemo(() => {
+    const options: Array<{ value: string; title: string }> = [];
+    options.push({ value: baseCurrency, title: `${baseCurrency} (Base Currency)` });
+    if (assetCurrency && assetCurrency !== baseCurrency) {
+      options.push({ value: assetCurrency, title: `${assetCurrency} (Asset Currency)` });
+    }
+    return options;
+  }, [baseCurrency, assetCurrency]);
+
+  const needsFxConversion = assetCurrency !== "" && valueCurrency !== assetCurrency;
+
+  // FX rate: valueCurrency → assetCurrency (only fetched when currencies differ)
+  const { rate: fxRate, isLoading: isFxLoading } = useFxRate(
+    needsFxConversion ? valueCurrency : undefined,
+    needsFxConversion ? assetCurrency : undefined,
+  );
+
   const computedUnitsFromValue = useMemo(() => {
     const trimmed = totalValueInput.trim();
     if (!trimmed || !effectivePrice) return null;
     const parsed = Number(trimmed);
     if (isNaN(parsed) || parsed <= 0) return null;
-    return computeUnitsFromTotalValue(parsed, effectivePrice);
-  }, [totalValueInput, effectivePrice]);
+    // Convert entered value to asset currency if needed
+    const valueInAssetCurrency = needsFxConversion && fxRate ? parsed * fxRate : parsed;
+    if (needsFxConversion && !fxRate) return null; // FX rate not yet loaded
+    return computeUnitsFromTotalValue(valueInAssetCurrency, effectivePrice);
+  }, [totalValueInput, effectivePrice, needsFxConversion, fxRate]);
 
   const computedTotalDisplay = useMemo(() => {
+    if (needsFxConversion && !fxRate && totalValueInput.trim()) {
+      return "Loading FX rate...";
+    }
     if (computedUnitsFromValue === null || !price) return null;
-    return `${formatUnits(computedUnitsFromValue)} units × ${formatCurrency(price.price, price.currency)} = ${formatCurrency(computedUnitsFromValue * price.price, price.currency)}`;
-  }, [computedUnitsFromValue, price]);
+    const nativeTotal = computedUnitsFromValue * price.price;
+    if (needsFxConversion && fxRate) {
+      return `${formatUnits(computedUnitsFromValue)} units × ${formatCurrency(price.price, price.currency)} = ${formatCurrency(nativeTotal, price.currency)} (${formatCurrency(Number(totalValueInput.trim()), valueCurrency)} at ${fxRate.toFixed(4)} ${valueCurrency}/${assetCurrency})`;
+    }
+    return `${formatUnits(computedUnitsFromValue)} units × ${formatCurrency(price.price, price.currency)} = ${formatCurrency(nativeTotal, price.currency)}`;
+  }, [computedUnitsFromValue, price, needsFxConversion, fxRate, totalValueInput, valueCurrency, assetCurrency]);
 
   function handleNameBlur(event: Form.Event<string>) {
     const error = validateAssetName(event.target.value);
@@ -257,6 +289,7 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
     totalValue?: string;
     priceOverride?: string;
     inputMode: string;
+    valueCurrency?: string;
   }) {
     const nameValidation = validateAssetName(values.name);
     if (nameValidation) {
@@ -291,8 +324,15 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
         setTotalValueError(tvValidation);
         return;
       }
-      const totalValue = parseTotalValue(values.totalValue!);
-      finalUnits = computeUnitsFromTotalValue(totalValue, resolvedPrice);
+
+      if (needsFxConversion && !fxRate) {
+        setTotalValueError("FX rate not available yet. Please wait a moment.");
+        return;
+      }
+
+      const rawTotalValue = parseTotalValue(values.totalValue!);
+      const totalValueInAssetCurrency = needsFxConversion && fxRate ? rawTotalValue * fxRate : rawTotalValue;
+      finalUnits = computeUnitsFromTotalValue(totalValueInAssetCurrency, resolvedPrice);
       if (finalUnits <= 0) {
         setTotalValueError("Computed units would be zero — check the price and total value.");
         return;
@@ -335,7 +375,7 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
   return (
     <Form
       navigationTitle={`Add ${result.name}`}
-      isLoading={isPriceLoading || isSubmitting}
+      isLoading={isPriceLoading || isFxLoading || isSubmitting}
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Add to Portfolio" icon={Icon.PlusCircle} onSubmit={handleSubmit} />
@@ -391,6 +431,15 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
         <Form.Dropdown.Item value="value" title="Total Value Invested" icon={Icon.BankNote} />
       </Form.Dropdown>
 
+      {/* ── Currency Selector (value mode only) ── */}
+      {inputMode === "value" && (
+        <Form.Dropdown id="valueCurrency" title="Value Currency" value={valueCurrency} onChange={setValueCurrency}>
+          {valueCurrencyOptions.map((opt) => (
+            <Form.Dropdown.Item key={opt.value} value={opt.value} title={opt.title} />
+          ))}
+        </Form.Dropdown>
+      )}
+
       {/* ── Units Input (direct mode) ── */}
       {inputMode === "units" && (
         <>
@@ -417,7 +466,7 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
           <Form.TextField
             id="totalValue"
             title="Total Value Invested"
-            placeholder={price ? `e.g. 1000, 5000, 25000 (${price.currency})` : "e.g. 1000, 5000, 25000"}
+            placeholder={`e.g. 1000, 5000, 25000 (${valueCurrency})`}
             error={totalValueError}
             onChange={handleTotalValueChange}
             onBlur={handleTotalValueBlur}
@@ -430,7 +479,9 @@ function ConfirmInvestmentForm({ result, account, onBack, onConfirm }: ConfirmIn
               computedTotalDisplay
                 ? `→ ${computedTotalDisplay}`
                 : price
-                  ? `Enter total amount invested. Units will be auto-calculated at ${formatCurrency(price.price, price.currency)} per unit.`
+                  ? needsFxConversion
+                    ? `Enter total amount in ${valueCurrency}. Will be converted to ${assetCurrency} then divided by ${formatCurrency(price.price, price.currency)}/unit.`
+                    : `Enter total amount invested in ${valueCurrency}. Units will be auto-calculated at ${formatCurrency(price.price, price.currency)} per unit.`
                   : "Enter total amount invested. Units will be calculated from the current price."
             }
           />

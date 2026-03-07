@@ -10,11 +10,7 @@
  * portfolio data to compute the projection.
  */
 
-import {
-  loadPortfolioForTool,
-  loadFireSettingsForTool,
-  buildFireSummary,
-} from "./tool-data";
+import { loadPortfolioForTool, loadFireSettingsForTool, buildFireSummary } from "./tool-data";
 import { formatCurrency, formatPercent } from "../utils/formatting";
 
 /**
@@ -37,7 +33,7 @@ export default async function tool() {
   }
 
   const portfolio = await loadPortfolioForTool();
-  const summary = buildFireSummary(settings, portfolio);
+  const summary = await buildFireSummary(settings, portfolio);
 
   const lines: string[] = [];
 
@@ -46,7 +42,9 @@ export default async function tool() {
   lines.push("FIRE Settings:");
   lines.push(`  Target (FIRE Number): ${formatCurrency(summary.settings.targetValue, "GBP")}`);
   lines.push(`  Withdrawal Rate: ${formatPercent(summary.settings.withdrawalRate, { showSign: false })}`);
-  lines.push(`  Annual Growth Rate (Nominal): ${formatPercent(summary.settings.annualGrowthRate, { showSign: false })}`);
+  lines.push(
+    `  Annual Growth Rate (Nominal): ${formatPercent(summary.settings.annualGrowthRate, { showSign: false })}`,
+  );
   lines.push(`  Annual Inflation: ${formatPercent(summary.settings.annualInflation, { showSign: false })}`);
   lines.push(`  Real Growth Rate: ${formatPercent(summary.projection.realGrowthRate * 100, { showSign: false })}`);
   lines.push(`  Year of Birth: ${summary.settings.yearOfBirth}`);
@@ -61,7 +59,9 @@ export default async function tool() {
   }
 
   if (summary.settings.excludedAccountIds.length > 0) {
-    lines.push(`  Excluded Accounts: ${summary.settings.excludedAccountIds.length} account(s) excluded from FIRE calculations`);
+    lines.push(
+      `  Excluded Accounts: ${summary.settings.excludedAccountIds.length} account(s) excluded from FIRE calculations`,
+    );
   }
 
   lines.push("");
@@ -75,7 +75,9 @@ export default async function tool() {
   if (summary.contributions.items.length > 0) {
     lines.push("  Breakdown:");
     for (const item of summary.contributions.items) {
-      lines.push(`    - ${item.positionName} in ${item.accountName}: ${formatCurrency(item.monthlyAmount, "GBP")}/month`);
+      lines.push(
+        `    - ${item.positionName} in ${item.accountName}: ${formatCurrency(item.monthlyAmount, "GBP")}/month`,
+      );
     }
   } else {
     lines.push("  No contributions configured.");
@@ -86,7 +88,9 @@ export default async function tool() {
   // ── Projection ──
 
   lines.push("Projection:");
-  lines.push(`  Current Portfolio Value (included): ${formatCurrency(summary.projection.currentPortfolioValue, "GBP")}`);
+  lines.push(
+    `  Current Portfolio Value (included): ${formatCurrency(summary.projection.currentPortfolioValue, "GBP")}`,
+  );
   lines.push(`  Target Value: ${formatCurrency(summary.projection.targetValue, "GBP")}`);
 
   if (summary.projection.targetHitInWindow) {

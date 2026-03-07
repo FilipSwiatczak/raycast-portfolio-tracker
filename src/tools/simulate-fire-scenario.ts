@@ -13,7 +13,7 @@
  * - "What happens if I start with £300,000 and contribute £2,000/month?"
  */
 
-import { loadFireSettingsForTool } from "./tool-data";
+import { loadFireSettingsForTool, loadPortfolioForTool, computePortfolioValue } from "./tool-data";
 import { calculateProjection, totalAnnualContribution } from "../services/fire-calculator";
 import { formatCurrency, formatPercent } from "../utils/formatting";
 
@@ -100,12 +100,17 @@ export default async function tool(input: Input) {
     return "The user has not configured their FIRE settings yet. They need to set up the FIRE Dashboard first using the FIRE Dashboard command. Once configured, you can run what-if scenarios against their settings.";
   }
 
+  // ── Compute real portfolio value from cached prices ──
+
+  const portfolio = await loadPortfolioForTool();
+  const computedPortfolioValue = portfolio ? await computePortfolioValue(portfolio, settings.excludedAccountIds) : 0;
+
   // ── Build baseline values ──
 
   const baselineAnnualContrib = totalAnnualContribution(settings.contributions);
   const baselineMonthly = baselineAnnualContrib / 12;
 
-  const baselinePortfolioValue = 0; // Tools don't have live valuation; uses 0 as starting point
+  const baselinePortfolioValue = computedPortfolioValue;
   const baselineTargetValue = settings.targetValue;
   const baselineGrowthRate = settings.annualGrowthRate;
   const baselineInflation = settings.annualInflation;
