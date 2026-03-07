@@ -38,8 +38,16 @@ import { Form, ActionPanel, Action, Detail, Icon, useNavigation } from "@raycast
 import { useState, useMemo } from "react";
 import { AssetSearchResult, AssetType } from "../utils/types";
 import { useAssetPrice } from "../hooks/useAssetPrice";
-import { validateUnits, parseUnits, validateAssetName, validatePrice } from "../utils/validation";
-import { formatCurrency, formatPercent } from "../utils/formatting";
+import {
+  validateUnits,
+  parseUnits,
+  validateAssetName,
+  validatePrice,
+  validateTotalValue,
+  parseTotalValue,
+  computeUnitsFromTotalValue,
+} from "../utils/validation";
+import { formatCurrency, formatPercent, formatUnits } from "../utils/formatting";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
 import { COLOR_POSITIVE, COLOR_NEGATIVE, COLOR_NEUTRAL, COLOR_PRIMARY } from "../utils/constants";
 
@@ -255,6 +263,13 @@ export function AssetConfirmation({
  * this alternative component that uses a Form layout instead.
  * This is the version used in the actual navigation flow.
  */
+/**
+ * Input mode for specifying position size.
+ * - "units"  — user enters number of units directly
+ * - "value"  — user enters total invested amount, units are auto-calculated
+ */
+type AssetInputMode = "units" | "value";
+
 export function AssetConfirmationForm({
   result,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -265,10 +280,30 @@ export function AssetConfirmationForm({
   const { pop } = useNavigation();
   const { price, isLoading: isPriceLoading, error: priceError } = useAssetPrice(result.symbol);
 
+  const [inputMode, setInputMode] = useState<AssetInputMode>("units");
   const [unitsError, setUnitsError] = useState<string | undefined>(undefined);
+  const [totalValueError, setTotalValueError] = useState<string | undefined>(undefined);
+  const [totalValueInput, setTotalValueInput] = useState<string>("");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [priceOverrideError, setPriceOverrideError] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ── Computed values for total-value mode ──
+
+  const effectivePrice = useMemo(() => price?.price ?? 0, [price]);
+
+  const computedUnitsFromValue = useMemo(() => {
+    const trimmed = totalValueInput.trim();
+    if (!trimmed || !effectivePrice) return null;
+    const parsed = Number(trimmed);
+    if (isNaN(parsed) || parsed <= 0) return null;
+    return computeUnitsFromTotalValue(parsed, effectivePrice);
+  }, [totalValueInput, effectivePrice]);
+
+  const computedTotalDisplay = useMemo(() => {
+    if (computedUnitsFromValue === null || !price) return null;
+    return `${formatUnits(computedUnitsFromValue)} units × ${formatCurrency(price.price, price.currency)} = ${formatCurrency(computedUnitsFromValue * price.price, price.currency)}`;
+  }, [computedUnitsFromValue, price]);
 
   // ── Handlers ──
 
@@ -283,6 +318,18 @@ export function AssetConfirmationForm({
     if (unitsError) {
       setUnitsError(undefined);
     }
+  }
+
+  function handleTotalValueBlur(event: Form.Event<string>) {
+    if (event.target.value && event.target.value.trim().length > 0) {
+      const error = validateTotalValue(event.target.value);
+      setTotalValueError(error);
+    }
+  }
+
+  function handleTotalValueChange(value: string) {
+    setTotalValueInput(value);
+    if (totalValueError) setTotalValueError(undefined);
   }
 
   function handleNameBlur(event: Form.Event<string>) {
@@ -309,16 +356,22 @@ export function AssetConfirmationForm({
     }
   }
 
-  async function handleSubmit(values: { name: string; units: string; priceOverride?: string }) {
+  function handleInputModeChange(value: string) {
+    setInputMode(value as AssetInputMode);
+    setUnitsError(undefined);
+    setTotalValueError(undefined);
+  }
+
+  async function handleSubmit(values: {
+    name: string;
+    units?: string;
+    totalValue?: string;
+    priceOverride?: string;
+    inputMode: string;
+  }) {
     const nameValidation = validateAssetName(values.name);
     if (nameValidation) {
       setNameError(nameValidation);
-      return;
-    }
-
-    const unitValidation = validateUnits(values.units);
-    if (unitValidation) {
-      setUnitsError(unitValidation);
       return;
     }
 
@@ -332,8 +385,36 @@ export function AssetConfirmationForm({
     }
 
     if (!price) {
-      setUnitsError("Price data not yet available. Please wait a moment.");
+      if (inputMode === "units") {
+        setUnitsError("Price data not yet available. Please wait a moment.");
+      } else {
+        setTotalValueError("Price data not yet available. Please wait a moment.");
+      }
       return;
+    }
+
+    const resolvedPrice = priceOverrideValue ? parseUnits(priceOverrideValue) : price.price;
+    let finalUnits: number;
+
+    if (inputMode === "value") {
+      const tvValidation = validateTotalValue(values.totalValue);
+      if (tvValidation) {
+        setTotalValueError(tvValidation);
+        return;
+      }
+      const totalValue = parseTotalValue(values.totalValue!);
+      finalUnits = computeUnitsFromTotalValue(totalValue, resolvedPrice);
+      if (finalUnits <= 0) {
+        setTotalValueError("Computed units would be zero — check the price and total value.");
+        return;
+      }
+    } else {
+      const unitValidation = validateUnits(values.units);
+      if (unitValidation) {
+        setUnitsError(unitValidation);
+        return;
+      }
+      finalUnits = parseUnits(values.units!);
     }
 
     setIsSubmitting(true);
@@ -342,7 +423,7 @@ export function AssetConfirmationForm({
       await onConfirm({
         symbol: result.symbol,
         name: values.name.trim(),
-        units: parseUnits(values.units),
+        units: finalUnits,
         currency: price.currency,
         assetType: result.type,
         priceOverride: priceOverrideValue ? parseUnits(priceOverrideValue) : undefined,
@@ -421,27 +502,63 @@ export function AssetConfirmationForm({
         }
       />
 
-      {/* ── Units Input ── */}
+      {/* ── Input Mode Toggle ── */}
       <Form.Description title="Account" text={accountName} />
 
-      <Form.TextField
-        id="units"
-        title="Number of Units"
-        placeholder="e.g. 50, 12.5, 0.25"
-        error={unitsError}
-        onChange={handleUnitsChange}
-        onBlur={handleUnitsBlur}
-        autoFocus
-      />
+      <Form.Dropdown id="inputMode" title="Specify By" value={inputMode} onChange={handleInputModeChange}>
+        <Form.Dropdown.Item value="units" title="Number of Units" icon={Icon.Hashtag} />
+        <Form.Dropdown.Item value="value" title="Total Value Invested" icon={Icon.BankNote} />
+      </Form.Dropdown>
 
-      <Form.Description
-        title=""
-        text={
-          price
-            ? `Each unit is currently worth ${formatCurrency(price.price, price.currency)}`
-            : "Enter the number of units (shares) you hold."
-        }
-      />
+      {/* ── Units Input (direct mode) ── */}
+      {inputMode === "units" && (
+        <>
+          <Form.TextField
+            id="units"
+            title="Number of Units"
+            placeholder="e.g. 50, 12.5, 0.25"
+            error={unitsError}
+            onChange={handleUnitsChange}
+            onBlur={handleUnitsBlur}
+            autoFocus
+          />
+
+          <Form.Description
+            title=""
+            text={
+              price
+                ? `Each unit is currently worth ${formatCurrency(price.price, price.currency)}`
+                : "Enter the number of units (shares) you hold."
+            }
+          />
+        </>
+      )}
+
+      {/* ── Total Value Input (value mode) ── */}
+      {inputMode === "value" && (
+        <>
+          <Form.TextField
+            id="totalValue"
+            title="Total Value Invested"
+            placeholder={price ? `e.g. 1000, 5000, 25000 (${price.currency})` : "e.g. 1000, 5000, 25000"}
+            error={totalValueError}
+            onChange={handleTotalValueChange}
+            onBlur={handleTotalValueBlur}
+            autoFocus
+          />
+
+          <Form.Description
+            title=""
+            text={
+              computedTotalDisplay
+                ? `→ ${computedTotalDisplay}`
+                : price
+                  ? `Enter total amount invested. Units will be auto-calculated at ${formatCurrency(price.price, price.currency)} per unit.`
+                  : "Enter total amount invested. Units will be calculated from the current price."
+            }
+          />
+        </>
+      )}
     </Form>
   );
 }

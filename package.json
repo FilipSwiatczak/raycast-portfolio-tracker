@@ -34,6 +34,179 @@
       "mode": "view"
     }
   ],
+  "tools": [
+    {
+      "name": "get-portfolio-summary",
+      "title": "Get Portfolio Summary",
+      "description": "Returns a complete overview of the user's investment portfolio including all accounts, positions, asset type allocation, currencies held, and position counts. Use this to answer questions about portfolio composition, holdings, and asset allocation."
+    },
+    {
+      "name": "get-account-details",
+      "title": "Get Account Details",
+      "description": "Returns detailed information about a specific portfolio account identified by name. Includes all positions within that account with their full details. Use when the user asks about a specific account."
+    },
+    {
+      "name": "get-position-details",
+      "title": "Get Position Details",
+      "description": "Returns detailed information about a specific position identified by name or Yahoo Finance symbol. Searches across all accounts. Use when the user asks about a specific holding or investment."
+    },
+    {
+      "name": "get-debt-summary",
+      "title": "Get Debt Summary",
+      "description": "Returns a focused summary of all debt positions including balances, APR, monthly repayments, and repayment status. Use when the user asks about their debts, total debt, or repayment progress."
+    },
+    {
+      "name": "get-fire-projection",
+      "title": "Get FIRE Projection",
+      "description": "Returns the user's FIRE (Financial Independence, Retire Early) projection including settings, contributions, and timeline. Use when the user asks about their FIRE number, retirement timeline, or current FIRE trajectory."
+    },
+    {
+      "name": "simulate-fire-scenario",
+      "title": "Simulate FIRE Scenario",
+      "description": "Runs a custom FIRE projection with user-specified overrides for what-if analysis. Compares the scenario against the user's current baseline settings. Use when the user asks hypothetical questions like 'What if I increase contributions?' or 'What if growth drops to 5%?'."
+    }
+  ],
+  "ai": {
+    "instructions": "Portfolio Tracker is a personal finance extension that tracks stocks, ETFs, properties, cash, and debt across multiple accounts. All data is stored locally — there are no external accounts or servers. Prices refresh daily via Yahoo Finance. The FIRE Dashboard projects a path to financial independence using compound growth with inflation-adjusted (real) returns. When answering questions: always use the tools to fetch current data rather than assuming values. Portfolio values shown by tools may not include live market prices (tools read from local storage, not live APIs), so note this when discussing exact portfolio value. For FIRE projections, the real growth rate = (nominal growth - inflation) / 100. Contributions are monthly amounts that compound with half-year approximation. The FIRE number = annual spending × (100 / withdrawal rate). Debt balances are subtracted from portfolio value to produce net worth. Property positions use UK HPI data for appreciation. When the user mentions currencies, note that holdings in different currencies are converted to the base currency (configurable in preferences, default GBP) using live FX rates.",
+    "evals": [
+      {
+        "input": "@portfolio-tracker What's in my portfolio?",
+        "mocks": {
+          "get-portfolio-summary": "Portfolio Overview: 3 account(s), 7 position(s)\nCurrencies held: GBP, USD\n\nAsset Allocation:\n  Stock: 2 position(s) — AAPL, MSFT\n  ETF: 2 position(s) — VUSA.L, VWRL.L\n  Cash: 1 position(s) — GBP-CASH\n  Mortgage Property: 1 position(s) — PROPERTY\n  Credit Card: 1 position(s) — AMEX\n\nAccounts & Holdings:\nAccount: Vanguard ISA (ISA) — 3 position(s)\n  - Vanguard S&P 500 (VUSA.L) | Type: ETF | Units: 150 | Currency: GBP\n  - Vanguard All-World (VWRL.L) | Type: ETF | Units: 80 | Currency: GBP\n  - GBP Cash (GBP-CASH) | Type: Cash | Units: 5000 | Currency: GBP\n\nAccount: Trading 212 (Brokerage) — 2 position(s)\n  - Apple Inc. (AAPL) | Type: Stock | Units: 10 | Currency: USD\n  - Microsoft (MSFT) | Type: Stock | Units: 5 | Currency: USD"
+        },
+        "expected": [
+          {
+            "callsTool": "get-portfolio-summary"
+          },
+          {
+            "includes": "Vanguard"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker What's my current asset allocation?",
+        "mocks": {
+          "get-portfolio-summary": "Portfolio Overview: 2 account(s), 5 position(s)\nCurrencies held: GBP, USD\n\nAsset Allocation:\n  Stock: 2 position(s) — AAPL, MSFT\n  ETF: 2 position(s) — VUSA.L, VWRL.L\n  Cash: 1 position(s) — GBP-CASH\n\nAccounts & Holdings:\nAccount: ISA (ISA) — 3 position(s)\nAccount: Brokerage (Brokerage) — 2 position(s)"
+        },
+        "expected": [
+          {
+            "callsTool": "get-portfolio-summary"
+          },
+          {
+            "includes": "Stock"
+          },
+          {
+            "includes": "ETF"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker How many units of VUSA do I have?",
+        "mocks": {
+          "get-position-details": "Position Details for \"Vanguard S&P 500\"\n══════════════════════════════════════════════════\n\nName: Vanguard S&P 500\nSymbol: VUSA.L\nType: ETF\nAccount: Vanguard ISA (ISA)\nCurrency: GBP\nUnits: 150"
+        },
+        "expected": [
+          {
+            "callsTool": {
+              "name": "get-position-details",
+              "arguments": {
+                "query": {
+                  "includes": "VUSA"
+                }
+              }
+            }
+          },
+          {
+            "includes": "150"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker What's in my ISA?",
+        "mocks": {
+          "get-account-details": "Account: Vanguard ISA (ISA) — 3 position(s)\n  - Vanguard S&P 500 (VUSA.L) | Type: ETF | Units: 150 | Currency: GBP\n  - Vanguard All-World (VWRL.L) | Type: ETF | Units: 80 | Currency: GBP\n  - GBP Cash (GBP-CASH) | Type: Cash | Units: 5000 | Currency: GBP\n\n  Total positions: 3\n  Currencies: GBP"
+        },
+        "expected": [
+          {
+            "callsTool": {
+              "name": "get-account-details",
+              "arguments": {
+                "accountName": {
+                  "includes": "ISA"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker How much debt do I have?",
+        "mocks": {
+          "get-debt-summary": "Debt Summary\n============\n\nTotal Debt Positions: 2\n  Active: 2\n  Paid Off: 0\n  Archived: 0\n\nTotal Active Debt Balance: £8,500.00\nTotal Monthly Repayments: £350.00\nTotal Annual Repayments: £4,200.00\n\nActive Debts:\n  Credit Card (Credit Card)\n    Account: Debt\n    Balance: £3,500.00\n    APR: 22.90%\n    Monthly Repayment: £150.00\n\n  Car Loan (Auto Loan)\n    Account: Debt\n    Balance: £5,000.00\n    APR: 6.50%\n    Monthly Repayment: £200.00"
+        },
+        "expected": [
+          {
+            "callsTool": "get-debt-summary"
+          },
+          {
+            "includes": "8,500"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker When will I reach FIRE?",
+        "mocks": {
+          "get-fire-projection": "FIRE Settings:\n  Target (FIRE Number): £750,000.00\n  Withdrawal Rate: 4.00%\n  Annual Growth Rate (Nominal): 7.00%\n  Annual Inflation: 2.50%\n  Real Growth Rate: 4.50%\n  Year of Birth: 1990\n\nContributions:\n  Total Monthly: £1,500.00\n  Total Annual: £18,000.00\n\nProjection:\n  Current Portfolio Value (included): £200,000.00\n  Target Value: £750,000.00\n  FIRE Year: 2038\n  FIRE Age: 48\n  Calendar Days to FIRE: 4,745\n  Working Days to FIRE: 3,150"
+        },
+        "expected": [
+          {
+            "callsTool": "get-fire-projection"
+          },
+          {
+            "includes": "2038"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker What if I increase my contributions by £200 per month?",
+        "mocks": {
+          "simulate-fire-scenario": "FIRE What-If Scenario Comparison\n================================\n\nChanges Applied:\n  • Monthly Contributions: £1,500.00 → £1,700.00\n\nBaseline (Current Settings):\n  FIRE Year: 2038\n  FIRE Age: 48\n  Days to FIRE: 4,745\n\nScenario (With Changes):\n  FIRE Year: 2037\n  FIRE Age: 47\n  Days to FIRE: 4,380\n\nImpact:\n  FIRE reached 1 year(s) EARLIER (age 47 vs 48).\n  365 fewer calendar days to FIRE."
+        },
+        "expected": [
+          {
+            "callsTool": {
+              "name": "simulate-fire-scenario",
+              "arguments": {
+                "additionalMonthlyContribution": 200
+              }
+            }
+          },
+          {
+            "includes": "EARLIER"
+          }
+        ]
+      },
+      {
+        "input": "@portfolio-tracker What if my growth rate drops to 5%?",
+        "mocks": {
+          "simulate-fire-scenario": "FIRE What-If Scenario Comparison\n================================\n\nChanges Applied:\n  • Growth Rate: 7.00% → 5.00%\n\nBaseline (Current Settings):\n  FIRE Year: 2038\n  FIRE Age: 48\n\nScenario (With Changes):\n  FIRE Year: 2042\n  FIRE Age: 52\n\nImpact:\n  FIRE reached 4 year(s) LATER (age 52 vs 48)."
+        },
+        "expected": [
+          {
+            "callsTool": {
+              "name": "simulate-fire-scenario",
+              "arguments": {
+                "annualGrowthRate": 5
+              }
+            }
+          },
+          {
+            "includes": "LATER"
+          }
+        ]
+      }
+    ]
+  },
   "preferences": [
     {
       "name": "baseCurrency",

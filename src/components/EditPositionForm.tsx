@@ -40,10 +40,16 @@
 
 import React from "react";
 import { Form, ActionPanel, Action, Icon } from "@raycast/api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Position } from "../utils/types";
 import { ASSET_TYPE_LABELS } from "../utils/constants";
-import { validateUnits, parseUnits } from "../utils/validation";
+import {
+  validateUnits,
+  parseUnits,
+  validateTotalValue,
+  parseTotalValue,
+  computeUnitsFromTotalValue,
+} from "../utils/validation";
 import { formatUnits, formatCurrency, getDisplayName, hasCustomName } from "../utils/formatting";
 import { BatchRenameMatch } from "./BatchRenameForm";
 
@@ -177,6 +183,13 @@ export function EditPositionForm({
 // Phase 1 — Edit Mode
 // ──────────────────────────────────────────
 
+/**
+ * Input mode for specifying position size in the edit form.
+ * - "units"  — user enters number of units directly
+ * - "value"  — user enters total value, units are auto-calculated from priceOverride or last known price
+ */
+type EditInputMode = "units" | "value";
+
 interface EditPhaseFormProps {
   position: Position;
   accountName: string;
@@ -196,7 +209,10 @@ function EditPhaseForm({
 }: EditPhaseFormProps): React.JSX.Element {
   // ── Form State ──
 
+  const [inputMode, setInputMode] = useState<EditInputMode>("units");
   const [unitsError, setUnitsError] = useState<string | undefined>(undefined);
+  const [totalValueError, setTotalValueError] = useState<string | undefined>(undefined);
+  const [totalValueInput, setTotalValueInput] = useState<string>("");
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -208,12 +224,30 @@ function EditPhaseForm({
   const displayName = getDisplayName(position);
   const isRenamed = hasCustomName(position);
 
+  const referencePrice = position.priceOverride ?? 0;
+  const hasPriceForValueMode = referencePrice > 0;
+
   // Context-aware labels
   const unitsFieldTitle = isCash ? "Cash Amount" : "Number of Units";
   const unitsFieldPlaceholder = isCash ? "e.g. 500, 1250.50, 10000" : "e.g. 50, 12.5, 0.25";
   const unitsHelpText = isCash
     ? `Current balance: ${currentUnitsDisplay}. Enter the new total cash balance.`
     : `Current holding: ${currentUnitsDisplay} units. Enter the new total number of units you hold.`;
+
+  // ── Computed values for total-value mode ──
+
+  const computedUnitsFromValue = useMemo(() => {
+    const trimmed = totalValueInput.trim();
+    if (!trimmed || !referencePrice) return null;
+    const parsed = Number(trimmed);
+    if (isNaN(parsed) || parsed <= 0) return null;
+    return computeUnitsFromTotalValue(parsed, referencePrice);
+  }, [totalValueInput, referencePrice]);
+
+  const computedValueDisplay = useMemo(() => {
+    if (computedUnitsFromValue === null) return null;
+    return `→ ${formatUnits(computedUnitsFromValue)} units at ${formatCurrency(referencePrice, position.currency)}/unit`;
+  }, [computedUnitsFromValue, referencePrice, position.currency]);
 
   // ── Validation ──
 
@@ -229,6 +263,24 @@ function EditPhaseForm({
     if (unitsError) {
       setUnitsError(undefined);
     }
+  }
+
+  function handleTotalValueBlur(event: Form.Event<string>) {
+    if (event.target.value && event.target.value.trim().length > 0) {
+      const error = validateTotalValue(event.target.value);
+      setTotalValueError(error);
+    }
+  }
+
+  function handleTotalValueChange(value: string) {
+    setTotalValueInput(value);
+    if (totalValueError) setTotalValueError(undefined);
+  }
+
+  function handleInputModeChange(value: string) {
+    setInputMode(value as EditInputMode);
+    setUnitsError(undefined);
+    setTotalValueError(undefined);
   }
 
   function handleNameBlur(event: Form.Event<string>) {
@@ -248,14 +300,12 @@ function EditPhaseForm({
 
   // ── Submission ──
 
-  async function handleSubmit(values: { units: string; displayName?: string }) {
-    // Validate units
-    const unitValidation = validateUnits(values.units);
-    if (unitValidation) {
-      setUnitsError(unitValidation);
-      return;
-    }
-
+  async function handleSubmit(values: {
+    units?: string;
+    totalValue?: string;
+    inputMode?: string;
+    displayName?: string;
+  }) {
     // Validate name (if provided)
     const trimmedName = values.displayName?.trim() ?? "";
     if (trimmedName && trimmedName === position.name) {
@@ -263,7 +313,28 @@ function EditPhaseForm({
       return;
     }
 
-    const newUnits = parseUnits(values.units);
+    let newUnits: number;
+
+    if (!isCash && inputMode === "value") {
+      const tvValidation = validateTotalValue(values.totalValue);
+      if (tvValidation) {
+        setTotalValueError(tvValidation);
+        return;
+      }
+      const totalValue = parseTotalValue(values.totalValue!);
+      newUnits = computeUnitsFromTotalValue(totalValue, referencePrice);
+      if (newUnits <= 0) {
+        setTotalValueError("Computed units would be zero — check the price and total value.");
+        return;
+      }
+    } else {
+      const unitValidation = validateUnits(values.units);
+      if (unitValidation) {
+        setUnitsError(unitValidation);
+        return;
+      }
+      newUnits = parseUnits(values.units!);
+    }
 
     // Determine what changed
     const unitsChanged = newUnits !== position.units;
@@ -314,6 +385,8 @@ function EditPhaseForm({
   }
 
   // ── Render ──
+
+  const showValueMode = !isCash && hasPriceForValueMode;
 
   return (
     <Form
@@ -376,18 +449,53 @@ function EditPhaseForm({
 
       <Form.Separator />
 
-      {/* ── Units (editable) ── */}
-      <Form.TextField
-        id="units"
-        title={unitsFieldTitle}
-        placeholder={unitsFieldPlaceholder}
-        defaultValue={isCash ? String(position.units) : currentUnitsDisplay}
-        error={unitsError}
-        onChange={handleUnitsChange}
-        onBlur={handleUnitsBlur}
-      />
+      {/* ── Input Mode Toggle (non-cash with price override only) ── */}
+      {showValueMode && (
+        <Form.Dropdown id="inputMode" title="Specify By" value={inputMode} onChange={handleInputModeChange}>
+          <Form.Dropdown.Item value="units" title="Number of Units" icon={Icon.Hashtag} />
+          <Form.Dropdown.Item value="value" title="Total Value" icon={Icon.BankNote} />
+        </Form.Dropdown>
+      )}
 
-      <Form.Description title="" text={unitsHelpText} />
+      {/* ── Units (editable, default mode) ── */}
+      {(isCash || inputMode === "units") && (
+        <>
+          <Form.TextField
+            id="units"
+            title={unitsFieldTitle}
+            placeholder={unitsFieldPlaceholder}
+            defaultValue={isCash ? String(position.units) : currentUnitsDisplay}
+            error={unitsError}
+            onChange={handleUnitsChange}
+            onBlur={handleUnitsBlur}
+          />
+
+          <Form.Description title="" text={unitsHelpText} />
+        </>
+      )}
+
+      {/* ── Total Value (value mode, non-cash only) ── */}
+      {!isCash && inputMode === "value" && (
+        <>
+          <Form.TextField
+            id="totalValue"
+            title="Total Value"
+            placeholder={`e.g. 1000, 5000, 25000 (${position.currency})`}
+            error={totalValueError}
+            onChange={handleTotalValueChange}
+            onBlur={handleTotalValueBlur}
+          />
+
+          <Form.Description
+            title=""
+            text={
+              computedValueDisplay
+                ? computedValueDisplay
+                : `Enter the total value. Units will be calculated using the price override of ${formatCurrency(referencePrice, position.currency)}/unit.`
+            }
+          />
+        </>
+      )}
     </Form>
   );
 }
