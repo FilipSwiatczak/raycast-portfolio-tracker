@@ -146,19 +146,35 @@ export default async function tool(input: Input) {
   const baselineWithdrawalRate = settings.withdrawalRate;
 
   // ── Apply overrides for scenario ──
+  // Coerce all numeric inputs to Number — some models serialize numbers as
+  // strings (e.g. "4000" instead of 4000), which would produce NaN downstream.
 
-  const scenarioPortfolioValue = input.currentPortfolioValue ?? baselinePortfolioValue;
-  const scenarioTargetValue = input.targetValue ?? baselineTargetValue;
-  const scenarioGrowthRate = input.annualGrowthRate ?? baselineGrowthRate;
-  const scenarioInflation = input.annualInflation ?? baselineInflation;
-  const scenarioYearOfBirth = input.yearOfBirth ?? baselineYearOfBirth;
-  const scenarioWithdrawalRate = input.withdrawalRate ?? baselineWithdrawalRate;
+  const toNum = (v: number | string | undefined): number | undefined =>
+    v !== undefined && v !== null ? Number(v) : undefined;
+
+  const overridePortfolioValue = toNum(input.currentPortfolioValue);
+  const overrideTargetValue = toNum(input.targetValue);
+  const overrideGrowthRate = toNum(input.annualGrowthRate);
+  const overrideInflation = toNum(input.annualInflation);
+  const overrideYearOfBirth = toNum(input.yearOfBirth);
+  const overrideWithdrawalRate = toNum(input.withdrawalRate);
+  const overrideMonthlyContribution = toNum(input.monthlyContribution);
+  const overrideAdditionalMonthly = toNum(input.additionalMonthlyContribution);
+  const overrideCoastFromAge = toNum(input.coastFromAge);
+  const overrideTargetRetirementAge = toNum(input.targetRetirementAge);
+
+  const scenarioPortfolioValue = overridePortfolioValue ?? baselinePortfolioValue;
+  const scenarioTargetValue = overrideTargetValue ?? baselineTargetValue;
+  const scenarioGrowthRate = overrideGrowthRate ?? baselineGrowthRate;
+  const scenarioInflation = overrideInflation ?? baselineInflation;
+  const scenarioYearOfBirth = overrideYearOfBirth ?? baselineYearOfBirth;
+  const scenarioWithdrawalRate = overrideWithdrawalRate ?? baselineWithdrawalRate;
 
   let scenarioMonthly: number;
-  if (input.monthlyContribution !== undefined) {
-    scenarioMonthly = input.monthlyContribution;
-  } else if (input.additionalMonthlyContribution !== undefined) {
-    scenarioMonthly = baselineMonthly + input.additionalMonthlyContribution;
+  if (overrideMonthlyContribution !== undefined) {
+    scenarioMonthly = overrideMonthlyContribution;
+  } else if (overrideAdditionalMonthly !== undefined) {
+    scenarioMonthly = baselineMonthly + overrideAdditionalMonthly;
   } else {
     scenarioMonthly = baselineMonthly;
   }
@@ -197,14 +213,14 @@ export default async function tool(input: Input) {
 
   const coastAnalysis: string[] = [];
 
-  if (input.coastFromAge !== undefined) {
+  if (overrideCoastFromAge !== undefined) {
     // Q: "What if I stop contributing at age X?"
-    const coastStartYear = settings.yearOfBirth + input.coastFromAge;
+    const coastStartYear = settings.yearOfBirth + overrideCoastFromAge;
     const yearsToCoastStart = coastStartYear - currentYear;
 
     if (yearsToCoastStart <= 0) {
       coastAnalysis.push(
-        `  Note: coastFromAge ${input.coastFromAge} is in the past — showing result if coasting started today.`,
+        `  Note: coastFromAge ${overrideCoastFromAge} is in the past — showing result if coasting started today.`,
       );
     }
 
@@ -226,7 +242,7 @@ export default async function tool(input: Input) {
 
     coastAnalysis.push("");
     coastAnalysis.push("COAST FIRE SCENARIO:");
-    coastAnalysis.push(`  Stop contributing at age: ${input.coastFromAge} (year ${coastStartYear})`);
+    coastAnalysis.push(`  Stop contributing at age: ${overrideCoastFromAge} (year ${coastStartYear})`);
     coastAnalysis.push(`  Portfolio at coast start: ${formatCurrency(balanceAtCoast, "GBP")}`);
     coastAnalysis.push(`  Formula: n = log(FN / V_coast) / log(1 + r)`);
     coastAnalysis.push(
@@ -243,19 +259,19 @@ export default async function tool(input: Input) {
     }
   }
 
-  if (input.targetRetirementAge !== undefined) {
+  if (overrideTargetRetirementAge !== undefined) {
     // Q: "When can I start coasting to retire at age X?"
-    const targetRetirementYear = settings.yearOfBirth + input.targetRetirementAge;
+    const targetRetirementYear = settings.yearOfBirth + overrideTargetRetirementAge;
     const yearsToTarget = targetRetirementYear - currentYear;
 
     if (yearsToTarget <= 0) {
-      coastAnalysis.push(`  Note: targetRetirementAge ${input.targetRetirementAge} is in the past or current year.`);
+      coastAnalysis.push(`  Note: targetRetirementAge ${overrideTargetRetirementAge} is in the past or current year.`);
     } else {
       const requiredCoastBalance = scenarioTargetValue / Math.pow(1 + scenarioRealRate, yearsToTarget);
 
       coastAnalysis.push("");
       coastAnalysis.push(
-        `COAST FIRE — WHEN CAN I START COASTING TO RETIRE AT AGE ${input.targetRetirementAge} (${targetRetirementYear})?`,
+        `COAST FIRE — WHEN CAN I START COASTING TO RETIRE AT AGE ${overrideTargetRetirementAge} (${targetRetirementYear})?`,
       );
       coastAnalysis.push(`  Formula: Required_Coast_Balance = FN / (1 + r)^n`);
       coastAnalysis.push(
@@ -312,32 +328,6 @@ export default async function tool(input: Input) {
   lines.push("================================");
   lines.push("");
 
-  // ── Mathematical formulas for this scenario ──
-
-  lines.push("FORMULAS USED:");
-  lines.push(
-    `  Real rate: r = (nominalGrowth - inflation) / 100 = (${scenarioGrowthRate} - ${scenarioInflation}) / 100 = ${scenarioRealRate.toFixed(6)}`,
-  );
-  lines.push("  Year-by-year: V(n) = V(n-1) × (1 + r) + C × (1 + r/2)");
-  lines.push(`    where C = annual contribution = ${formatCurrency(scenarioAnnualContrib, "GBP")}/year`);
-  lines.push("  Coast FIRE balance: Coast_Balance = FN / (1 + r)^yearsToRetirement");
-  lines.push("  Lump sum to reach FIRE year T (without changing contributions):");
-  lines.push("    N = T - currentYear");
-  lines.push("    compoundFactor = (1 + r)^N");
-  lines.push("    contribFV = C × (1 + r/2) × (compoundFactor - 1) / r");
-  lines.push("    P_required = (FN - contribFV) / compoundFactor");
-  lines.push("    Lump_Sum = P_required - P_current");
-  lines.push("");
-
-  // ── Coast FIRE analysis (injected before comparison) ──
-
-  if (coastAnalysis.length > 0) {
-    for (const line of coastAnalysis) {
-      lines.push(line);
-    }
-    lines.push("");
-  }
-
   // ── Describe what changed ──
 
   const changes: string[] = [];
@@ -374,11 +364,11 @@ export default async function tool(input: Input) {
   if (input.yearOfBirth !== undefined) {
     changes.push(`Year of Birth: ${baselineYearOfBirth} → ${scenarioYearOfBirth}`);
   }
-  if (input.coastFromAge !== undefined) {
-    changes.push(`Coast Mode: stop contributing at age ${input.coastFromAge}`);
+  if (overrideCoastFromAge !== undefined) {
+    changes.push(`Coast Mode: stop contributing at age ${overrideCoastFromAge}`);
   }
-  if (input.targetRetirementAge !== undefined) {
-    changes.push(`Target Retirement Age: ${input.targetRetirementAge} (Coast FIRE analysis)`);
+  if (overrideTargetRetirementAge !== undefined) {
+    changes.push(`Target Retirement Age: ${overrideTargetRetirementAge} (Coast FIRE analysis)`);
   }
 
   if (changes.length > 0) {
@@ -541,6 +531,32 @@ export default async function tool(input: Input) {
   } else {
     lines.push("  Neither the baseline nor the scenario reaches FIRE within 30 years.");
   }
+
+  // ── Coast FIRE analysis (appended after answer) ──
+
+  if (coastAnalysis.length > 0) {
+    lines.push("");
+    for (const line of coastAnalysis) {
+      lines.push(line);
+    }
+  }
+
+  // ── Mathematical formulas reference (appended last) ──
+
+  lines.push("");
+  lines.push("FORMULAS USED:");
+  lines.push(
+    `  Real rate: r = (nominalGrowth - inflation) / 100 = (${scenarioGrowthRate} - ${scenarioInflation}) / 100 = ${scenarioRealRate.toFixed(6)}`,
+  );
+  lines.push("  Year-by-year: V(n) = V(n-1) × (1 + r) + C × (1 + r/2)");
+  lines.push(`    where C = annual contribution = ${formatCurrency(scenarioAnnualContrib, "GBP")}/year`);
+  lines.push("  Coast FIRE balance: Coast_Balance = FN / (1 + r)^yearsToRetirement");
+  lines.push("  Lump sum to reach FIRE year T (without changing contributions):");
+  lines.push("    N = T - currentYear");
+  lines.push("    compoundFactor = (1 + r)^N");
+  lines.push("    contribFV = C × (1 + r/2) × (compoundFactor - 1) / r");
+  lines.push("    P_required = (FN - contribFV) / compoundFactor");
+  lines.push("    Lump_Sum = P_required - P_current");
 
   return lines.join("\n");
 }
